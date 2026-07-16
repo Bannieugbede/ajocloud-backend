@@ -38,7 +38,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 ## Phase 1 — Identity and security foundation
 
 - [x] **COMPLETE** Users
-- [x] **COMPLETE** Authentication
+- [x] **COMPLETE** Password authentication, phone/email account verification, and consent recording
 - [x] **COMPLETE** Sessions and refresh-token reuse handling
 - [ ] **NOT STARTED** Device-management API (schema exists)
 - [x] **COMPLETE** Roles

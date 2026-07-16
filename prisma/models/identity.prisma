@@ -11,17 +11,55 @@ model User {
   createdAt       DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
 
-  profile             UserProfile?
-  credential          UserCredential?
-  sessions            Session[]
-  devices             Device[]
-  roleAssignments     UserRole[]
-  organisationMembers OrganisationMember[]
-  kycProfile          KycProfile?
-  wallets             Wallet[]
+  profile                UserProfile?
+  credential             UserCredential?
+  sessions               Session[]
+  devices                Device[]
+  roleAssignments        UserRole[]
+  organisationMembers    OrganisationMember[]
+  kycProfile             KycProfile?
+  wallets                Wallet[]
+  verificationChallenges AccountVerificationChallenge[]
+  consents               UserConsent[]
 
   @@index([status, createdAt])
   @@map("users")
+}
+
+model AccountVerificationChallenge {
+  id                String                     @id @default(uuid()) @db.Uuid
+  userId            String                     @db.Uuid
+  channel           AccountVerificationChannel
+  codeHash          String                     @db.VarChar(128)
+  destinationMasked String                     @db.VarChar(191)
+  expiresAt         DateTime                   @db.Timestamptz(6)
+  resendAvailableAt DateTime                   @db.Timestamptz(6)
+  attemptCount      Int                        @default(0)
+  maxAttempts       Int                        @default(5)
+  consumedAt        DateTime?                  @db.Timestamptz(6)
+  invalidatedAt     DateTime?                  @db.Timestamptz(6)
+  createdAt         DateTime                   @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, channel, createdAt])
+  @@index([expiresAt])
+  @@map("account_verification_challenges")
+}
+
+model UserConsent {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @db.Uuid
+  type       ConsentType
+  version    String      @db.VarChar(64)
+  acceptedAt DateTime    @default(now()) @db.Timestamptz(6)
+  ipAddress  String?     @db.Inet
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, type, version])
+  @@index([type, version, acceptedAt])
+  @@map("user_consents")
 }
 
 model UserProfile {

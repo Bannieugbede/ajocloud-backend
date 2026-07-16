@@ -1,19 +1,39 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { hash, verify, argon2id } from 'argon2';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
   AccountType,
+  AccountVerificationChannel,
+  ConsentType,
   FinancialAccountPurpose,
   SessionStatus,
   UserStatus,
 } from '../../../generated/prisma/enums.js';
 import type { Environment } from '../../config/env.schema.js';
+import type { AccountVerificationChallenge } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
+import {
+  maskVerificationDestination,
+  VERIFICATION_CODE_TTL_MS,
+  VERIFICATION_MAX_ATTEMPTS,
+  VERIFICATION_RESEND_COOLDOWN_MS,
+  verificationCodeHash,
+  verificationCodeMatches,
+} from './domain/verification-policy.js';
+import { VerificationDeliveryService } from './verification-delivery.service.js';
 
 interface ClientContext {
   readonly ipAddress?: string;
@@ -23,6 +43,16 @@ export interface TokenPair {
   readonly accessToken: string;
   readonly refreshToken: string;
   readonly expiresIn: string;
+  readonly accessTokenExpiresAt: string;
+}
+
+export interface VerificationChallengeResult {
+  readonly userId: string;
+  readonly channel: AccountVerificationChannel;
+  readonly destinationMasked: string;
+  readonly expiresAt: string;
+  readonly resendAvailableAt: string;
+  readonly deliveryStatus: 'SENT' | 'FAILED';
 }
 
 @Injectable()
@@ -31,21 +61,26 @@ export class AuthService {
   private readonly accessTtl: string;
   private readonly tokenPepper: string;
   private readonly refreshTtlSeconds: number;
+  private readonly accessTtlSeconds: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
     private readonly jwt: JwtService,
+    private readonly verificationDelivery: VerificationDeliveryService,
     config: ConfigService<Environment, true>,
   ) {
     this.accessSecret = config.get('JWT_ACCESS_SECRET', { infer: true });
     this.accessTtl = config.get('JWT_ACCESS_TTL', { infer: true });
+    this.accessTtlSeconds = parseDurationSeconds(this.accessTtl);
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
     this.refreshTtlSeconds = config.get('JWT_REFRESH_TTL_SECONDS', { infer: true });
   }
 
-  async register(dto: RegisterDto, context: ClientContext): Promise<TokenPair> {
+  async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
     const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone.trim();
+    const challenge = this.newChallenge(AccountVerificationChannel.PHONE, phone);
     const passwordHash = await hash(dto.password, {
       type: argon2id,
       memoryCost: 65_536,
@@ -62,11 +97,27 @@ export class AuthService {
         const created = await tx.user.create({
           data: {
             email,
-            status: UserStatus.ACTIVE,
+            phone,
+            status: UserStatus.PENDING_VERIFICATION,
             credential: { create: { passwordHash } },
             profile: { create: { firstName: dto.firstName.trim(), lastName: dto.lastName.trim() } },
             wallets: { create: { currency: 'NGN' } },
             roleAssignments: { create: { roleId: memberRole.id } },
+            consents: {
+              create: [
+                {
+                  type: ConsentType.TERMS,
+                  version: '2026-07-16',
+                  ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
+                },
+                {
+                  type: ConsentType.PRIVACY,
+                  version: '2026-07-16',
+                  ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
+                },
+              ],
+            },
+            verificationChallenges: { create: challenge.data },
           },
         });
         const wallet = await tx.wallet.findUniqueOrThrow({
@@ -103,13 +154,186 @@ export class AuthService {
         });
         return created;
       });
-      return this.createSession(user.id, context);
+      const deliveryStatus = await this.deliverChallenge({
+        userId: user.id,
+        destination: phone,
+        challenge,
+      });
+      return this.challengeResponse(user.id, challenge, deliveryStatus);
     } catch (error: unknown) {
       if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
         throw new ConflictException('An account with these details already exists');
       }
       throw error;
     }
+  }
+
+  async verifyPhone(
+    userId: string,
+    code: string,
+  ): Promise<VerificationChallengeResult & { nextStep: 'VERIFY_EMAIL' }> {
+    const result = await this.transactions.serializable(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user?.phone || !user.email) return { kind: 'missing' } as const;
+      if (user.phoneVerifiedAt) return { kind: 'already', email: user.email } as const;
+      const challenge = await tx.accountVerificationChallenge.findFirst({
+        where: {
+          userId,
+          channel: AccountVerificationChannel.PHONE,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!challenge) return { kind: 'expired' } as const;
+      const validation = this.validateChallenge(challenge, code);
+      if (validation === 'invalid') {
+        const attempts = challenge.attemptCount + 1;
+        await tx.accountVerificationChallenge.update({
+          where: { id: challenge.id },
+          data: {
+            attemptCount: attempts,
+            ...(attempts >= challenge.maxAttempts ? { invalidatedAt: new Date() } : {}),
+          },
+        });
+        return { kind: 'invalid' } as const;
+      }
+      if (validation === 'expired') return { kind: 'expired' } as const;
+      if (validation === 'locked') return { kind: 'locked' } as const;
+      const emailChallenge = this.newChallenge(AccountVerificationChannel.EMAIL, user.email);
+      await tx.accountVerificationChallenge.update({
+        where: { id: challenge.id },
+        data: { consumedAt: new Date() },
+      });
+      await tx.user.update({ where: { id: userId }, data: { phoneVerifiedAt: new Date() } });
+      await tx.accountVerificationChallenge.updateMany({
+        where: {
+          userId,
+          channel: AccountVerificationChannel.EMAIL,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
+        data: { invalidatedAt: new Date() },
+      });
+      await tx.accountVerificationChallenge.create({ data: { ...emailChallenge.data, userId } });
+      return { kind: 'verified', email: user.email, challenge: emailChallenge } as const;
+    });
+    if (result.kind === 'missing') throw new NotFoundException('Verification request not found');
+    if (result.kind === 'expired') throw new BadRequestException('Verification code has expired');
+    if (result.kind === 'locked')
+      throw new HttpException('Verification attempts exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    if (result.kind === 'invalid') throw new UnauthorizedException('Verification code is invalid');
+    if (result.kind === 'already') {
+      return this.resendVerification(userId, AccountVerificationChannel.EMAIL).then((response) => ({
+        ...response,
+        nextStep: 'VERIFY_EMAIL' as const,
+      }));
+    }
+    const deliveryStatus = await this.deliverChallenge({
+      userId,
+      destination: result.email,
+      challenge: result.challenge,
+    });
+    return {
+      ...this.challengeResponse(userId, result.challenge, deliveryStatus),
+      nextStep: 'VERIFY_EMAIL',
+    };
+  }
+
+  async verifyEmail(userId: string, code: string, context: ClientContext): Promise<TokenPair> {
+    const result = await this.transactions.serializable(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user?.email || !user.phoneVerifiedAt) return { kind: 'missing' } as const;
+      if (user.emailVerifiedAt && user.status === UserStatus.ACTIVE)
+        return { kind: 'already' } as const;
+      const challenge = await tx.accountVerificationChallenge.findFirst({
+        where: {
+          userId,
+          channel: AccountVerificationChannel.EMAIL,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!challenge) return { kind: 'expired' } as const;
+      const validation = this.validateChallenge(challenge, code);
+      if (validation === 'invalid') {
+        const attempts = challenge.attemptCount + 1;
+        await tx.accountVerificationChallenge.update({
+          where: { id: challenge.id },
+          data: {
+            attemptCount: attempts,
+            ...(attempts >= challenge.maxAttempts ? { invalidatedAt: new Date() } : {}),
+          },
+        });
+        return { kind: 'invalid' } as const;
+      }
+      if (validation === 'expired') return { kind: 'expired' } as const;
+      if (validation === 'locked') return { kind: 'locked' } as const;
+      await tx.accountVerificationChallenge.update({
+        where: { id: challenge.id },
+        data: { consumedAt: new Date() },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { emailVerifiedAt: new Date(), status: UserStatus.ACTIVE },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'auth.account_verified',
+          subjectType: 'User',
+          subjectId: userId,
+        },
+      });
+      return { kind: 'verified' } as const;
+    });
+    if (result.kind === 'missing') throw new NotFoundException('Verification request not found');
+    if (result.kind === 'already') throw new ConflictException('Email is already verified');
+    if (result.kind === 'expired') throw new BadRequestException('Verification code has expired');
+    if (result.kind === 'locked')
+      throw new HttpException('Verification attempts exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    if (result.kind === 'invalid') throw new UnauthorizedException('Verification code is invalid');
+    return this.createSession(userId, context);
+  }
+
+  async resendVerification(
+    userId: string,
+    channel: AccountVerificationChannel,
+  ): Promise<VerificationChallengeResult> {
+    const result = await this.transactions.serializable(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      const destination = channel === AccountVerificationChannel.PHONE ? user?.phone : user?.email;
+      if (!user || !destination) return { kind: 'missing' } as const;
+      if (channel === AccountVerificationChannel.EMAIL && !user.phoneVerifiedAt)
+        return { kind: 'missing' } as const;
+      const latest = await tx.accountVerificationChallenge.findFirst({
+        where: { userId, channel, consumedAt: null, invalidatedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (latest && latest.resendAvailableAt > new Date())
+        return { kind: 'cooldown', retryAt: latest.resendAvailableAt } as const;
+      const challenge = this.newChallenge(channel, destination);
+      await tx.accountVerificationChallenge.updateMany({
+        where: { userId, channel, consumedAt: null, invalidatedAt: null },
+        data: { invalidatedAt: new Date() },
+      });
+      await tx.accountVerificationChallenge.create({ data: { ...challenge.data, userId } });
+      return { kind: 'created', destination, challenge } as const;
+    });
+    if (result.kind === 'missing') throw new NotFoundException('Verification request not found');
+    if (result.kind === 'cooldown') {
+      throw new HttpException(
+        `Try again after ${result.retryAt.toISOString()}`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const deliveryStatus = await this.deliverChallenge({
+      userId,
+      destination: result.destination,
+      challenge: result.challenge,
+    });
+    return this.challengeResponse(userId, result.challenge, deliveryStatus);
   }
 
   async login(dto: LoginDto, context: ClientContext): Promise<TokenPair> {
@@ -179,6 +403,7 @@ export class AuthService {
       accessToken: await this.signAccessToken(result.userId, result.sessionId),
       refreshToken: result.rawToken,
       expiresIn: this.accessTtl,
+      accessTokenExpiresAt: new Date(Date.now() + this.accessTtlSeconds * 1_000).toISOString(),
     };
   }
 
@@ -208,6 +433,77 @@ export class AuthService {
       accessToken: await this.signAccessToken(userId, session.id),
       refreshToken: rawToken,
       expiresIn: this.accessTtl,
+      accessTokenExpiresAt: new Date(Date.now() + this.accessTtlSeconds * 1_000).toISOString(),
+    };
+  }
+
+  private newChallenge(channel: AccountVerificationChannel, destination: string) {
+    const id = randomUUID();
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const now = Date.now();
+    const expiresAt = new Date(now + VERIFICATION_CODE_TTL_MS);
+    const resendAvailableAt = new Date(now + VERIFICATION_RESEND_COOLDOWN_MS);
+    return {
+      id,
+      code,
+      destinationMasked: maskVerificationDestination(channel, destination),
+      expiresAt,
+      resendAvailableAt,
+      data: {
+        id,
+        channel,
+        codeHash: verificationCodeHash(id, code, this.tokenPepper),
+        destinationMasked: maskVerificationDestination(channel, destination),
+        expiresAt,
+        resendAvailableAt,
+        maxAttempts: VERIFICATION_MAX_ATTEMPTS,
+      },
+    } as const;
+  }
+
+  private validateChallenge(
+    challenge: AccountVerificationChallenge | null,
+    code: string,
+  ): 'valid' | 'invalid' | 'expired' | 'locked' {
+    if (!challenge || challenge.expiresAt <= new Date()) return 'expired';
+    if (challenge.attemptCount >= challenge.maxAttempts) return 'locked';
+    return verificationCodeMatches(challenge.id, code, challenge.codeHash, this.tokenPepper)
+      ? 'valid'
+      : 'invalid';
+  }
+
+  private async deliverChallenge(input: {
+    userId: string;
+    destination: string;
+    challenge: ReturnType<AuthService['newChallenge']>;
+  }): Promise<'SENT' | 'FAILED'> {
+    try {
+      await this.verificationDelivery.send({
+        userId: input.userId,
+        challengeId: input.challenge.id,
+        channel: input.challenge.data.channel,
+        destination: input.destination,
+        destinationMasked: input.challenge.destinationMasked,
+        code: input.challenge.code,
+      });
+      return 'SENT';
+    } catch {
+      return 'FAILED';
+    }
+  }
+
+  private challengeResponse(
+    userId: string,
+    challenge: ReturnType<AuthService['newChallenge']>,
+    deliveryStatus: 'SENT' | 'FAILED',
+  ): VerificationChallengeResult {
+    return {
+      userId,
+      channel: challenge.data.channel,
+      destinationMasked: challenge.destinationMasked,
+      expiresAt: challenge.expiresAt.toISOString(),
+      resendAvailableAt: challenge.resendAvailableAt.toISOString(),
+      deliveryStatus,
     };
   }
 
@@ -243,4 +539,12 @@ export class AuthService {
       });
     });
   }
+}
+
+function parseDurationSeconds(value: string): number {
+  const match = /^(\d+)([smhd])$/.exec(value);
+  if (!match) throw new Error('JWT access TTL is invalid');
+  const amount = Number(match[1]);
+  const multiplier = { s: 1, m: 60, h: 3_600, d: 86_400 }[match[2] as 's' | 'm' | 'h' | 'd'];
+  return amount * multiplier;
 }

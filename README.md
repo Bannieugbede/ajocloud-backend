@@ -36,7 +36,7 @@ bun run start:worker
 bun run start:scheduler
 ```
 
-The API defaults to `http://localhost:3000/api/v1`. Swagger is at `/api/docs`; liveness and readiness are `/api/v1/health/live` and `/api/v1/health/ready`. RabbitMQ's local-only management UI is at `http://localhost:15672`.
+The API defaults to `http://localhost:3000/api/v1`. Swagger is at `/api/docs`; liveness and readiness are `/api/v1/health/live` and `/api/v1/health/ready`. Registration uses phone then email verification before issuing a session. RabbitMQ's local-only management UI is at `http://localhost:15672`.
 
 ## Database and Prisma
 

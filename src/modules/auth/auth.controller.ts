@@ -9,6 +9,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { AccessTokenGuard } from './guards/access-token.guard.js';
+import { ResendVerificationDto, VerifyAccountDto } from './dto/verify-account.dto.js';
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
@@ -26,6 +27,27 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   login(@Body() dto: LoginDto, @Req() request: FastifyRequest) {
     return this.auth.login(dto, this.context(request));
+  }
+
+  @Post('verify-phone')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verifyPhone(@Body() dto: VerifyAccountDto) {
+    return this.auth.verifyPhone(dto.userId, dto.code);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verifyEmail(@Body() dto: VerifyAccountDto, @Req() request: FastifyRequest) {
+    return this.auth.verifyEmail(dto.userId, dto.code, this.context(request));
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.auth.resendVerification(dto.userId, dto.channel);
   }
 
   @Post('refresh')

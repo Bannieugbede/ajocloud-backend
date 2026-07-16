@@ -5,7 +5,13 @@
 
 ## Complete
 
-Foundation bootstrap/infrastructure/docs; auth/session rotation; live permissions; users/profile; wallet ownership reads; append-only ledger posting/reversal; audit/idempotency; Docker/CI; fixed and flexible whole-unit Ajo creation/locking/calendars/versioned swaps; versioned fee snapshots; Food Coordinator application/review/approval/suspension; provider-neutral Bill Payment catalog/validation/reservation/payment/manual reconciliation/provider reversal/receipt; KYC tier/provider boundaries; configurable referral and notification policies; Akawo schema expansion; public brand configuration; and an additive migration verified on PostgreSQL 18.
+Foundation bootstrap/infrastructure/docs; auth/session rotation; phone/email account verification;
+versioned registration consent and verification delivery records; live permissions; users/profile;
+wallet ownership reads; append-only ledger posting/reversal; audit/idempotency; Docker/CI; fixed and
+flexible whole-unit Ajo creation/locking/calendars/versioned swaps; versioned fee snapshots; Food
+Coordinator application/review/approval/suspension; provider-neutral Bill Payment catalog/validation/
+reservation/payment/manual reconciliation/provider reversal/receipt; KYC tier/provider boundaries;
+configurable referral and notification policies; Akawo schema expansion; and public brand configuration.
 
 ## In progress
 
@@ -25,8 +31,17 @@ The real Monnify Bill Payment adapter/webhook and real Monnify/Dojah KYC adapter
 
 ## Unresolved decisions and risks
 
-See ADR-001/002/003 and all open questions. Primary risks are absent provider verification, incomplete service-level concurrency/replay coverage, manual rather than scheduled Bill Payment reconciliation, no verified webhook intake, no rate-limit Redis storage, no device/MFA APIs, and schema-only portions of Food Ajo, Akawo, KYC, referrals, and notifications.
+See ADR-001/002/003 and all open questions. Primary risks are absent provider verification, incomplete
+service-level concurrency/replay coverage, manual rather than scheduled Bill Payment reconciliation,
+no verified webhook intake, no rate-limit Redis storage, no password recovery/device/MFA APIs,
+production verification delivery still requiring approved SMS/email providers, and schema-only
+portions of Food Ajo, Akawo, KYC, referrals, and notifications.
 
 ## Verification and migrations
 
-Final `bun run check` passed: Prisma validation/generation, formatting, lint, strict typecheck, 49 unit tests across 15 suites, and build. The explicit Prisma format/validate/generate, format check, lint, typecheck, `bun run test`, E2E, and build commands also passed; E2E passed 1 test. Both migrations applied cleanly to isolated PostgreSQL 18 databases, Prisma detected no schema drift, and the forced database integration suite passed 2 tests covering serializable reservation/idempotency and the Bill Payment total-debit constraint.
+Current `bun run check` passed: Prisma validation/generation, formatting, lint, strict typecheck,
+53 unit tests across 17 suites, and build. E2E passed 1 test. The first two migrations were previously
+applied cleanly to isolated PostgreSQL 18 databases. The new account-verification schema validates
+and generates, but migration application, seed execution, migration status, and database integration
+could not run because no `DATABASE_URL`/PostgreSQL service was available; an isolated `/tmp` cluster
+was attempted but sandbox shared-memory access and the escalation usage limit prevented startup.

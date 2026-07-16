@@ -6,11 +6,13 @@ import {
   AjoMemberRole,
   AjoMemberStatus,
   AjoSlotStatus,
+  AccountVerificationChannel,
   ContributionFrequency,
   AccountType,
   FinancialAccountPurpose,
   UserStatus,
 } from '../../generated/prisma/enums.js';
+import { verificationCodeHash } from '../../src/modules/auth/domain/verification-policy.js';
 
 const PERMISSIONS = [
   'users.read',
@@ -83,13 +85,79 @@ export async function runSeed(): Promise<void> {
     const passwordHash = await hash('Development-Only-Password-123!', { type: argon2id });
     const admin = await prisma.user.upsert({
       where: { email: 'ada.admin@example.test' },
-      update: {},
+      update: {
+        phone: '+2348010000001',
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+      },
       create: {
         email: 'ada.admin@example.test',
+        phone: '+2348010000001',
         status: UserStatus.ACTIVE,
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
         profile: { create: { firstName: 'Ada', lastName: 'Testadmin' } },
         credential: { create: { passwordHash } },
         wallets: { create: { currency: 'NGN' } },
+      },
+    });
+
+    const tokenPepper = process.env.TOKEN_PEPPER;
+    if (!tokenPepper) throw new Error('TOKEN_PEPPER is required for verification seed data');
+    const phonePending = await prisma.user.upsert({
+      where: { email: 'phone.pending@example.test' },
+      update: {},
+      create: {
+        id: '40000000-0000-4000-8000-000000000001',
+        email: 'phone.pending@example.test',
+        phone: '+2348010000002',
+        status: UserStatus.PENDING_VERIFICATION,
+        profile: { create: { firstName: 'Phone', lastName: 'Pending' } },
+        credential: { create: { passwordHash } },
+        roleAssignments: { create: { roleId: required(roles, 'MEMBER') } },
+      },
+    });
+    const phoneChallengeId = '40000000-0000-4000-8000-000000000011';
+    await prisma.accountVerificationChallenge.upsert({
+      where: { id: phoneChallengeId },
+      update: {},
+      create: {
+        id: phoneChallengeId,
+        userId: phonePending.id,
+        channel: AccountVerificationChannel.PHONE,
+        codeHash: verificationCodeHash(phoneChallengeId, '111111', tokenPepper),
+        destinationMasked: '+234••••002',
+        expiresAt: new Date('2099-01-01T00:00:00Z'),
+        resendAvailableAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    });
+
+    const emailPending = await prisma.user.upsert({
+      where: { email: 'email.pending@example.test' },
+      update: {},
+      create: {
+        id: '40000000-0000-4000-8000-000000000002',
+        email: 'email.pending@example.test',
+        phone: '+2348010000003',
+        status: UserStatus.PENDING_VERIFICATION,
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        profile: { create: { firstName: 'Email', lastName: 'Pending' } },
+        credential: { create: { passwordHash } },
+        roleAssignments: { create: { roleId: required(roles, 'MEMBER') } },
+      },
+    });
+    const emailChallengeId = '40000000-0000-4000-8000-000000000012';
+    await prisma.accountVerificationChallenge.upsert({
+      where: { id: emailChallengeId },
+      update: {},
+      create: {
+        id: emailChallengeId,
+        userId: emailPending.id,
+        channel: AccountVerificationChannel.EMAIL,
+        codeHash: verificationCodeHash(emailChallengeId, '222222', tokenPepper),
+        destinationMasked: 'em•••@example.test',
+        expiresAt: new Date('2099-01-01T00:00:00Z'),
+        resendAvailableAt: new Date('2026-01-01T00:00:00Z'),
       },
     });
     for (const roleName of ['PLATFORM_ADMIN', 'MEMBER']) {

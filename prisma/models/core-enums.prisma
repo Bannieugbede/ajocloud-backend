@@ -9,6 +9,16 @@ enum CredentialType {
   PASSWORD
 }
 
+enum AccountVerificationChannel {
+  PHONE
+  EMAIL
+}
+
+enum ConsentType {
+  TERMS
+  PRIVACY
+}
+
 enum SessionStatus {
   ACTIVE
   REVOKED

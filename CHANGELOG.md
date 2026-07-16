@@ -4,6 +4,8 @@
 
 ### Added
 
+- Two-stage phone/email account verification with HMAC-only OTP challenges, resend/attempt limits, versioned registration consent, delivery/audit records, deterministic development personas, and additive migration.
+
 - Fastify NestJS modular-monolith foundation with strict configuration, logging, security, health, API documentation, workers, and scheduler.
 - Multi-file Prisma financial data model, environment-safe seeds, and initial migration.
 - Rotating refresh-token authentication, scoped permissions, users, wallets, Traditional Ajo lifecycle/scheduling, ledger, audit, and idempotency foundations.
