@@ -1,13 +1,13 @@
 # ADR-001 — Ajo rotation and liquidity
 
-- Status: Accepted for foundation; unresolved variants prohibited
+- Status: Accepted for fixed Ajo; flexible units are governed by ADR-002
 - Date: 2026-07-16
 
 ## Decision
 
-The safe MVP uses one fixed group contribution amount and whole slots. A member may own multiple slots; each slot contributes the same amount every cycle and receives exactly one payout position. For `N` active slots, every cycle collects `N × contributionMinor` and pays exactly that amount to one slot. Odd and even counts use the identical formula and integer arithmetic.
+The fixed-Ajo MVP uses one fixed group contribution amount and whole slots. A member may own multiple slots; each slot contributes the same amount every cycle and receives exactly one payout position. For `N` active slots, every cycle collects `N × contributionMinor` and pays exactly that amount to one slot. Odd and even counts use the identical formula and integer arithmetic. ADR-002 extends the model with administrator-defined smallest whole units; it does not authorize fractional units or platform float.
 
-The full rotation is generated before lock, must fit the configured maximum 12-month window, and becomes immutable when locked. Slot swaps require all policy approvals and create immutable audit history; the service is not implemented until approval policy is decided. Custom amounts, fractional slots, multiple payout recipients per cycle, and schedule mutation after lock are unsupported.
+The full rotation is generated before lock, must fit the configured maximum 12-month window, and becomes immutable when locked. Slot swaps require both affected owners, expire if not approved, and create a new immutable payout-schedule version. Arbitrary custom amounts, fractional slots, unapproved multiple-recipient execution, and in-place schedule mutation after lock are unsupported.
 
 ## Consequences
 

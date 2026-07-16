@@ -1,6 +1,6 @@
 # Ajo Cloud Backend
 
-Ajo Cloud is a modular-monolith backend for cooperative savings, Traditional Ajo, Food Ajo, Akawa goals, wallets, and auditable financial operations. Financial correctness, traceability, authorization boundaries, and idempotency take priority over convenience.
+Ajo Cloud is a modular-monolith backend for Traditional Ajo, Akawo savings, Food Ajo, wallets, payments and disbursements, Bill Payment, KYC, referrals, notifications, administration, fees, disputes, and auditable financial operations. Financial correctness, traceability, authorization boundaries, and idempotency take priority over convenience.
 
 ## Stack
 
@@ -80,8 +80,10 @@ bun run check
 ## Documentation
 
 - [Architecture](docs/architecture.md), [database](docs/database.md), [ledger](docs/financial-ledger.md)
+- [Bill Payment](docs/bill-payments.md), [progressive KYC](docs/kyc.md), [Food Ajo](docs/food-ajo.md), [Akawo](docs/akawo.md), [referrals](docs/referrals.md)
 - [Authentication](docs/authentication.md), [authorization](docs/authorization.md), [API conventions](docs/api-conventions.md)
 - [Messaging](docs/messaging.md), [observability](docs/observability.md), [testing](docs/testing.md)
 - [Local development](docs/local-development.md), [deployment](docs/deployment.md), [security policy](SECURITY.md)
 - [Roadmap](ROADMAP.md), [current status](docs/progress/current-status.md), [implementation log](docs/progress/implementation-log.md)
 - [ADRs](docs/adr/README.md), [open financial questions](docs/open-questions/ajo-financial-rules.md)
+- [Brand](docs/brand.md), [flexible Ajo questions](docs/open-questions/flexible-ajo-contribution-rules.md), and [provider/product references](docs/product-reference)

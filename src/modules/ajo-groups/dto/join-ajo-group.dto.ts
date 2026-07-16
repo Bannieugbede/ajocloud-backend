@@ -7,6 +7,6 @@ export class JoinAjoGroupDto {
 
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(1_000)
   requestedSlots!: number;
 }

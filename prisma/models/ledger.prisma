@@ -1,18 +1,20 @@
 model FinancialAccount {
-  id        String      @id @default(uuid()) @db.Uuid
-  code      String      @unique @db.VarChar(80)
-  name      String      @db.VarChar(160)
+  id        String                   @id @default(uuid()) @db.Uuid
+  code      String                   @unique @db.VarChar(80)
+  name      String                   @db.VarChar(160)
   type      AccountType
-  currency  String      @db.Char(3)
-  walletId  String?     @db.Uuid
-  isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
+  purpose   FinancialAccountPurpose?
+  currency  String                   @db.Char(3)
+  walletId  String?                  @db.Uuid
+  isActive  Boolean                  @default(true)
+  createdAt DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime                 @updatedAt @db.Timestamptz(6)
 
   wallet        Wallet?       @relation(fields: [walletId], references: [id], onDelete: Restrict)
   ledgerEntries LedgerEntry[]
 
   @@index([type, currency, isActive])
+  @@index([purpose, currency, isActive])
   @@map("financial_accounts")
 }
 

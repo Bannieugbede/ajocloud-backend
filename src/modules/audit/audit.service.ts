@@ -14,7 +14,8 @@ export interface AuditEvent {
   readonly metadata?: Record<string, unknown>;
 }
 
-const SENSITIVE_KEYS = /password|token|secret|otp|bvn|nin|card|authorization/i;
+const SENSITIVE_KEYS =
+  /password|token|secret|otp|bvn|nin|card|authorization|customerReference|accountNumber|biometric|mediaReference/i;
 
 @Injectable()
 export class AuditService {

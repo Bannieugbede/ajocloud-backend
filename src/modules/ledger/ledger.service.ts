@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { LedgerEntryDirection, LedgerTransactionStatus } from '../../../generated/prisma/enums.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
+import type { TransactionClient } from '../../infrastructure/database/transaction.service.js';
 import { assertBalancedPosting } from './domain/ledger-invariants.js';
 import type { LedgerPostingCommand } from './domain/ledger.types.js';
 
@@ -10,38 +11,58 @@ export class LedgerService {
 
   async post(command: LedgerPostingCommand): Promise<{ id: string; reference: string }> {
     assertBalancedPosting(command);
-    return this.transactions.serializable(async (tx) => {
-      const existing = await tx.ledgerTransaction.findUnique({
-        where: { idempotencyKey: command.idempotencyKey },
-      });
-      if (existing) return { id: existing.id, reference: existing.reference };
+    return this.transactions.serializable((tx) => this.postWithin(tx, command));
+  }
 
-      const transaction = await tx.ledgerTransaction.create({
-        data: {
-          idempotencyKey: command.idempotencyKey,
-          reference: command.reference,
-          description: command.description,
-          currency: command.currency,
-          status: LedgerTransactionStatus.POSTED,
-          postedAt: new Date(),
-          ...(command.initiatedByUserId ? { initiatedByUserId: command.initiatedByUserId } : {}),
-          ...(command.correlationId ? { correlationId: command.correlationId } : {}),
-          entries: {
-            create: command.entries.map((entry, index) => ({
-              accountId: entry.accountId,
-              direction:
-                entry.direction === 'DEBIT'
-                  ? LedgerEntryDirection.DEBIT
-                  : LedgerEntryDirection.CREDIT,
-              amountMinor: entry.amountMinor,
-              currency: command.currency,
-              sequence: index + 1,
-            })),
-          },
-        },
-      });
-      return { id: transaction.id, reference: transaction.reference };
+  async postWithin(
+    tx: TransactionClient,
+    command: LedgerPostingCommand,
+  ): Promise<{ id: string; reference: string }> {
+    assertBalancedPosting(command);
+    const existing = await tx.ledgerTransaction.findUnique({
+      where: { idempotencyKey: command.idempotencyKey },
     });
+    if (existing) return { id: existing.id, reference: existing.reference };
+
+    const transaction = await tx.ledgerTransaction.create({
+      data: {
+        idempotencyKey: command.idempotencyKey,
+        reference: command.reference,
+        description: command.description,
+        currency: command.currency,
+        status: LedgerTransactionStatus.POSTED,
+        postedAt: new Date(),
+        ...(command.initiatedByUserId ? { initiatedByUserId: command.initiatedByUserId } : {}),
+        ...(command.correlationId ? { correlationId: command.correlationId } : {}),
+        entries: {
+          create: command.entries.map((entry, index) => ({
+            accountId: entry.accountId,
+            direction:
+              entry.direction === 'DEBIT'
+                ? LedgerEntryDirection.DEBIT
+                : LedgerEntryDirection.CREDIT,
+            amountMinor: entry.amountMinor,
+            currency: command.currency,
+            sequence: index + 1,
+          })),
+        },
+      },
+    });
+    return { id: transaction.id, reference: transaction.reference };
+  }
+
+  async accountBalanceWithin(tx: TransactionClient, accountId: string): Promise<bigint> {
+    const entries = await tx.ledgerEntry.findMany({
+      where: { accountId, transaction: { status: LedgerTransactionStatus.POSTED } },
+      select: { direction: true, amountMinor: true },
+    });
+    return entries.reduce(
+      (balance, entry) =>
+        entry.direction === LedgerEntryDirection.CREDIT
+          ? balance + entry.amountMinor
+          : balance - entry.amountMinor,
+      0n,
+    );
   }
 
   async reverse(

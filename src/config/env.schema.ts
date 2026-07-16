@@ -2,50 +2,127 @@ import { z } from 'zod';
 
 const optionalUrl = z.union([z.url(), z.literal('')]).optional();
 
-export const environmentSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  APP_NAME: z.string().min(1).default('Ajo Cloud API'),
-  APP_VERSION: z.string().min(1).default('0.1.0'),
-  HOST: z.string().min(1).default('0.0.0.0'),
-  PORT: z.coerce.number().int().min(0).max(65535).default(3000),
-  API_PREFIX: z
-    .string()
-    .regex(/^[a-z][a-z0-9-]*$/)
-    .default('api'),
-  CORS_ORIGINS: z.string().min(1),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  DATABASE_URL: z.url(),
-  DIRECT_DATABASE_URL: optionalUrl,
-  REDIS_URL: z.url(),
-  RABBITMQ_URL: z.url(),
-  JWT_ACCESS_SECRET: z.string().min(32),
-  JWT_ACCESS_TTL: z
-    .string()
-    .regex(/^\d+[smhd]$/)
-    .default('15m'),
-  TOKEN_PEPPER: z.string().min(32),
-  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
-  IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
-  PAYMENT_PROVIDER: z.enum(['mock', 'paystack', 'flutterwave']).default('mock'),
-  KYC_PROVIDER: z.enum(['mock', 'dojah']).default('mock'),
-  SMS_PROVIDER: z.string().default('mock'),
-  PUSH_PROVIDER: z.string().default('mock'),
-  AWS_REGION: z.string().optional(),
-  AWS_S3_BUCKET: z.string().optional(),
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
-  PAYSTACK_SECRET_KEY: z.string().optional(),
-  PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
-  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
-  DOJA_APP_ID: z.string().optional(),
-  DOJA_SECRET_KEY: z.string().optional(),
-  SMTP_URL: optionalUrl,
-  SMS_API_KEY: z.string().optional(),
-  PUSH_API_KEY: z.string().optional(),
-  OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
-  ERROR_MONITORING_DSN: optionalUrl,
-  SWAGGER_ENABLED: z.stringbool().default(true),
-});
+export const environmentSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    APP_NAME: z.string().min(1).default('Ajo Cloud API'),
+    APP_VERSION: z.string().min(1).default('0.1.0'),
+    HOST: z.string().min(1).default('0.0.0.0'),
+    PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+    API_PREFIX: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]*$/)
+      .default('api'),
+    CORS_ORIGINS: z.string().min(1),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+    DATABASE_URL: z.url(),
+    DIRECT_DATABASE_URL: optionalUrl,
+    REDIS_URL: z.url(),
+    RABBITMQ_URL: z.url(),
+    JWT_ACCESS_SECRET: z.string().min(32),
+    JWT_ACCESS_TTL: z
+      .string()
+      .regex(/^\d+[smhd]$/)
+      .default('15m'),
+    TOKEN_PEPPER: z.string().min(32),
+    JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
+    IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
+    PAYMENT_PROVIDER: z.enum(['mock', 'paystack', 'flutterwave', 'monnify']).default('mock'),
+    BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
+    KYC_PROVIDER: z.enum(['mock', 'monnify', 'dojah']).default('mock'),
+    EMAIL_PROVIDER: z.enum(['console', 'brevo']).default('console'),
+    DEFAULT_CURRENCY: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .default('NGN'),
+    APPLICATION_TIMEZONE: z.string().min(1).default('Africa/Lagos'),
+    SMS_PROVIDER: z.string().default('mock'),
+    PUSH_PROVIDER: z.string().default('mock'),
+    AWS_REGION: z.string().optional(),
+    AWS_S3_BUCKET: z.string().optional(),
+    AWS_ACCESS_KEY_ID: z.string().optional(),
+    AWS_SECRET_ACCESS_KEY: z.string().optional(),
+    PAYSTACK_SECRET_KEY: z.string().optional(),
+    PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
+    FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+    MONNIFY_BASE_URL: optionalUrl,
+    MONNIFY_API_KEY: z.string().optional(),
+    MONNIFY_SECRET_KEY: z.string().optional(),
+    MONNIFY_CONTRACT_CODE: z.string().optional(),
+    MONNIFY_WEBHOOK_SECRET: z.string().optional(),
+    DOJAH_BASE_URL: optionalUrl,
+    DOJAH_APP_ID: z.string().optional(),
+    DOJAH_SECRET_KEY: z.string().optional(),
+    BREVO_BASE_URL: optionalUrl,
+    BREVO_API_KEY: z.string().optional(),
+    BREVO_SENDER_EMAIL: z.email().optional(),
+    BREVO_SENDER_NAME: z.string().optional(),
+    SMTP_URL: optionalUrl,
+    SMS_API_KEY: z.string().optional(),
+    PUSH_API_KEY: z.string().optional(),
+    OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
+    ERROR_MONITORING_DSN: optionalUrl,
+    SWAGGER_ENABLED: z.stringbool().default(true),
+  })
+  .superRefine((environment, context) => {
+    if (environment.EMAIL_PROVIDER === 'brevo') {
+      for (const key of ['BREVO_BASE_URL', 'BREVO_API_KEY', 'BREVO_SENDER_EMAIL'] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required for Brevo`,
+          });
+        }
+      }
+    }
+    if (environment.BILL_PAYMENT_PROVIDER === 'monnify') {
+      for (const key of [
+        'MONNIFY_BASE_URL',
+        'MONNIFY_API_KEY',
+        'MONNIFY_SECRET_KEY',
+        'MONNIFY_CONTRACT_CODE',
+        'MONNIFY_WEBHOOK_SECRET',
+      ] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required for Monnify`,
+          });
+        }
+      }
+    }
+    if (environment.KYC_PROVIDER === 'monnify') {
+      for (const key of [
+        'MONNIFY_BASE_URL',
+        'MONNIFY_API_KEY',
+        'MONNIFY_SECRET_KEY',
+        'MONNIFY_CONTRACT_CODE',
+      ] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required for Monnify KYC`,
+          });
+        }
+      }
+    }
+    if (environment.KYC_PROVIDER === 'dojah') {
+      for (const key of ['DOJAH_BASE_URL', 'DOJAH_APP_ID', 'DOJAH_SECRET_KEY'] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required for Dojah`,
+          });
+        }
+      }
+    }
+  });
 
 export type Environment = z.infer<typeof environmentSchema>;
 

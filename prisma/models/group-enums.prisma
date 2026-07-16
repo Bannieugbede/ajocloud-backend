@@ -14,6 +14,16 @@ enum ContributionFrequency {
   MONTHLY
 }
 
+enum AjoContributionMode {
+  FIXED
+  FLEXIBLE_UNIT
+}
+
+enum SwapInitiatorType {
+  MEMBER
+  ADMINISTRATOR
+}
+
 enum AjoMemberRole {
   GROUP_ADMIN
   MEMBER
@@ -91,6 +101,12 @@ enum SwapRequestStatus {
 enum SwapApprovalDecision {
   APPROVED
   REJECTED
+}
+
+enum ScheduleVersionReason {
+  INITIAL_LOCK
+  APPROVED_SWAP
+  ADMINISTRATIVE_CORRECTION
 }
 
 enum PenaltyCalculationType {

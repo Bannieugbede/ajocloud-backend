@@ -1,0 +1,15 @@
+model PublicAppConfiguration {
+  id          String    @id @default(uuid()) @db.Uuid
+  key         String    @db.VarChar(100)
+  version     Int       @default(1)
+  value       Json
+  isActive    Boolean   @default(true)
+  effectiveAt DateTime  @db.Timestamptz(6)
+  expiresAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([key, version])
+  @@index([key, isActive, effectiveAt])
+  @@map("public_app_configurations")
+}

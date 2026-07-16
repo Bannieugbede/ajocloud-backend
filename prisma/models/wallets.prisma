@@ -7,8 +7,9 @@ model Wallet {
   createdAt DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt DateTime     @updatedAt @db.Timestamptz(6)
 
-  user     User               @relation(fields: [userId], references: [id], onDelete: Restrict)
-  accounts FinancialAccount[]
+  user         User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  accounts     FinancialAccount[]
+  billPayments BillPayment[]
 
   @@unique([userId, currency])
   @@index([status])

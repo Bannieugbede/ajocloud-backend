@@ -7,6 +7,8 @@ import {
   AjoMemberStatus,
   AjoSlotStatus,
   ContributionFrequency,
+  AccountType,
+  FinancialAccountPurpose,
   UserStatus,
 } from '../../generated/prisma/enums.js';
 
@@ -14,6 +16,8 @@ const PERMISSIONS = [
   'users.read',
   'users.suspend',
   'kyc.review',
+  'food-coordinators.review',
+  'bill-payments.reconcile',
   'ajo.create',
   'ajo.manage',
   'ajo.lock',
@@ -30,7 +34,7 @@ const PERMISSIONS = [
 const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   SUPER_ADMIN: PERMISSIONS,
   PLATFORM_ADMIN: PERMISSIONS,
-  COMPLIANCE_OFFICER: ['users.read', 'kyc.review', 'audit.read'],
+  COMPLIANCE_OFFICER: ['users.read', 'kyc.review', 'food-coordinators.review', 'audit.read'],
   FINANCE_OFFICER: [
     'users.read',
     'payouts.review',
@@ -97,14 +101,92 @@ export async function runSeed(): Promise<void> {
     }
 
     await prisma.feeDefinition.upsert({
-      where: { code: 'PLATFORM_CONTRIBUTION_FIXED' },
+      where: { code_version: { code: 'PLATFORM_CONTRIBUTION_FIXED', version: 1 } },
       update: {},
       create: {
         code: 'PLATFORM_CONTRIBUTION_FIXED',
+        version: 1,
         name: 'Development platform contribution fee',
         calculationType: 'FIXED',
         amountMinor: 0n,
         currency: 'NGN',
+        payerType: 'MEMBER',
+        chargeEvent: 'CONTRIBUTION_SETTLED',
+        effectiveAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    });
+    await prisma.feeDefinition.upsert({
+      where: { code_version: { code: 'BILL_PAYMENT', version: 1 } },
+      update: {},
+      create: {
+        code: 'BILL_PAYMENT',
+        version: 1,
+        name: 'Development Bill Payment fee',
+        calculationType: 'FIXED',
+        amountMinor: 0n,
+        currency: 'NGN',
+        payerType: 'USER',
+        chargeEvent: 'BILL_PAYMENT_CREATED',
+        effectiveAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    });
+
+    const adminWallet = await prisma.wallet.findUniqueOrThrow({
+      where: { userId_currency: { userId: admin.id, currency: 'NGN' } },
+    });
+    for (const account of [
+      {
+        code: `WALLET:${adminWallet.id}:AVAILABLE`,
+        name: 'Wallet available balance',
+        type: AccountType.LIABILITY,
+        purpose: FinancialAccountPurpose.WALLET_AVAILABLE,
+        walletId: adminWallet.id,
+      },
+      {
+        code: `WALLET:${adminWallet.id}:RESERVED`,
+        name: 'Wallet reserved balance',
+        type: AccountType.LIABILITY,
+        purpose: FinancialAccountPurpose.WALLET_RESERVED,
+        walletId: adminWallet.id,
+      },
+      {
+        code: 'PLATFORM:PROVIDER_PAYABLE:NGN',
+        name: 'Provider payable',
+        type: AccountType.LIABILITY,
+        purpose: FinancialAccountPurpose.PROVIDER_PAYABLE,
+      },
+      {
+        code: 'PLATFORM:FEE_REVENUE:NGN',
+        name: 'Platform fee revenue',
+        type: AccountType.REVENUE,
+        purpose: FinancialAccountPurpose.PLATFORM_FEE_REVENUE,
+      },
+    ] as const) {
+      await prisma.financialAccount.upsert({
+        where: { code: account.code },
+        update: {},
+        create: { ...account, currency: 'NGN' },
+      });
+    }
+
+    await prisma.publicAppConfiguration.upsert({
+      where: { key_version: { key: 'brand', version: 1 } },
+      update: {},
+      create: {
+        key: 'brand',
+        version: 1,
+        effectiveAt: new Date('2026-01-01T00:00:00Z'),
+        value: {
+          name: 'Ajo Cloud',
+          colors: {
+            primary: '#0D47A1',
+            teal: '#15B0BB',
+            skyBlue: '#4DD0E1',
+            lightBlue: '#E3F6FA',
+            darkGray: '#212B36',
+            gray: '#637280',
+          },
+        },
       },
     });
 

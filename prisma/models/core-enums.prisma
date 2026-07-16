@@ -45,6 +45,23 @@ enum KycCheckStatus {
   ERROR
 }
 
+enum KycTier {
+  TIER_1
+  TIER_2
+  TIER_3
+}
+
+enum VerificationType {
+  BVN
+  NIN
+  VNIN
+  BANK_ACCOUNT
+  FACE_MATCH
+  LIVENESS
+  ADDRESS
+  MANUAL_REVIEW
+}
+
 enum ComplianceReviewStatus {
   OPEN
   APPROVED
@@ -65,6 +82,14 @@ enum AccountType {
   EQUITY
   REVENUE
   EXPENSE
+}
+
+enum FinancialAccountPurpose {
+  WALLET_AVAILABLE
+  WALLET_RESERVED
+  PROVIDER_PAYABLE
+  PLATFORM_FEE_REVENUE
+  REFERRAL_REWARD_EXPENSE
 }
 
 enum LedgerTransactionStatus {
@@ -193,12 +218,37 @@ enum FoodDistributionStatus {
   CANCELLED
 }
 
+enum FoodCoordinatorApplicationStatus {
+  DRAFT
+  SUBMITTED
+  AUTOMATED_REVIEW
+  MANUAL_REVIEW
+  MORE_INFORMATION_REQUIRED
+  APPROVED
+  REJECTED
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+enum FoodFulfilmentMethod {
+  DELIVERY
+  PICKUP
+  DELIVERY_OR_PICKUP
+}
+
 enum SavingsGoalStatus {
   DRAFT
   ACTIVE
   PAUSED
   COMPLETED
   CANCELLED
+}
+
+enum SavingsGoalType {
+  FLEXIBLE
+  TARGET
+  LOCKED
 }
 
 enum SavingsScheduleStatus {
@@ -220,4 +270,64 @@ enum ReferralStatus {
   QUALIFIED
   REWARDED
   REJECTED
+}
+
+enum ReferralCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum ReferralRewardStatus {
+  PENDING
+  APPROVED
+  RELEASED
+  REJECTED
+  REVERSED
+}
+
+enum BillPaymentStatus {
+  CREATED
+  VALIDATING
+  VALIDATED
+  PENDING
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  REVERSED
+  REFUND_PENDING
+  REFUNDED
+  RECONCILIATION_REQUIRED
+}
+
+enum BillPaymentAttemptStatus {
+  PENDING
+  SENT
+  CONFIRMED
+  FAILED
+  UNKNOWN
+}
+
+enum ReconciliationState {
+  NOT_REQUIRED
+  PENDING
+  MATCHED
+  MISMATCHED
+  RESOLVED
+}
+
+enum BillCatalogStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  DELIVERED
+  FAILED
+  RETRY_SCHEDULED
+  SUPPRESSED
 }

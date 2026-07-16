@@ -1,22 +1,46 @@
 model AjoCycle {
-  id                String         @id @default(uuid()) @db.Uuid
-  groupId           String         @db.Uuid
-  sequence          Int
-  status            AjoCycleStatus @default(PENDING)
-  contributionDueAt DateTime       @db.Timestamptz(6)
-  payoutDueAt       DateTime       @db.Timestamptz(6)
-  openedAt          DateTime?      @db.Timestamptz(6)
-  completedAt       DateTime?      @db.Timestamptz(6)
-  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime       @updatedAt @db.Timestamptz(6)
+  id                        String         @id @default(uuid()) @db.Uuid
+  groupId                   String         @db.Uuid
+  sequence                  Int
+  status                    AjoCycleStatus @default(PENDING)
+  contributionDueAt         DateTime       @db.Timestamptz(6)
+  contributionOpensAt       DateTime       @db.Timestamptz(6)
+  contributionClosesAt      DateTime       @db.Timestamptz(6)
+  graceEndsAt               DateTime       @db.Timestamptz(6)
+  payoutEligibilityCutoffAt DateTime       @db.Timestamptz(6)
+  payoutDueAt               DateTime       @db.Timestamptz(6)
+  payoutProcessingEndsAt    DateTime       @db.Timestamptz(6)
+  openedAt                  DateTime?      @db.Timestamptz(6)
+  completedAt               DateTime?      @db.Timestamptz(6)
+  createdAt                 DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime       @updatedAt @db.Timestamptz(6)
 
   group                 AjoGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
   contributionSchedules ContributionSchedule[]
-  payoutSchedule        PayoutSchedule?
+  payoutSchedules       PayoutSchedule[]
 
   @@unique([groupId, sequence])
   @@index([groupId, status, contributionDueAt])
   @@map("ajo_cycles")
+}
+
+model AjoScheduleVersion {
+  id                String                @id @default(uuid()) @db.Uuid
+  groupId           String                @db.Uuid
+  version           Int
+  previousVersionId String?               @db.Uuid
+  reason            ScheduleVersionReason
+  snapshot          Json
+  createdByUserId   String                @db.Uuid
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+
+  group           AjoGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  previousVersion AjoScheduleVersion?  @relation("ScheduleVersionChain", fields: [previousVersionId], references: [id], onDelete: Restrict)
+  nextVersions    AjoScheduleVersion[] @relation("ScheduleVersionChain")
+
+  @@unique([groupId, version])
+  @@index([previousVersionId])
+  @@map("ajo_schedule_versions")
 }
 
 model ContributionSchedule {
@@ -49,8 +73,8 @@ model ContributionSchedule {
 model PayoutSchedule {
   id              String               @id @default(uuid()) @db.Uuid
   groupId         String               @db.Uuid
-  cycleId         String               @unique @db.Uuid
-  slotId          String               @unique @db.Uuid
+  cycleId         String               @db.Uuid
+  slotId          String               @db.Uuid
   amountDueMinor  BigInt
   amountPaidMinor BigInt               @default(0)
   currency        String               @db.Char(3)
@@ -66,6 +90,8 @@ model PayoutSchedule {
   slot    AjoSlot  @relation(fields: [slotId], references: [id], onDelete: Restrict)
   payouts Payout[]
 
+  @@unique([cycleId, slotId, scheduleVersion])
+  @@unique([groupId, slotId, scheduleVersion])
   @@index([groupId, status, dueAt])
   @@map("payout_schedules")
 }

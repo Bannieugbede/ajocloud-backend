@@ -11,6 +11,8 @@ Report vulnerabilities privately to the project security owner; do not open a pu
 - Authorization combines roles/permissions with organisation, group, user, and wallet ownership checks.
 - Financial commands use integer minor units, unique references, serializable boundaries where needed, immutable balanced ledger entries, reversals, and idempotency records.
 - Provider webhooks require adapter-level signature verification, replay-resistant provider event IDs, persistence before processing, and redacted logging. Real adapters remain blocked until reviewed.
+- Bill payments reserve wallet funds atomically before provider dispatch. Timeouts and ambiguous provider results retain the reserve and enter reconciliation; only confirmed failures release it. Provider events are immutable and deduplicated.
+- KYC uses progressive tiers, provider boundaries, least-privilege review access, masked identifiers, and explicit retention policy. Raw BVN, NIN/vNIN, biometric material, and provider payloads are not persisted unless separately approved and encrypted.
 - Pino redacts authorization, passwords, tokens, OTPs, hashes, and cookies. Audit metadata applies additional sensitive-key redaction.
 - Dependency updates require lockfile review, CI checks, `bun audit`, and urgent remediation for exploitable high/critical findings.
 

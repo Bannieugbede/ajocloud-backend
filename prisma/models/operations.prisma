@@ -2,56 +2,148 @@ model Referral {
   id             String         @id @default(uuid()) @db.Uuid
   referrerUserId String         @db.Uuid
   referredUserId String         @unique @db.Uuid
+  campaignId     String?        @db.Uuid
   code           String         @db.VarChar(64)
   status         ReferralStatus @default(PENDING)
   qualifiedAt    DateTime?      @db.Timestamptz(6)
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
 
-  rewards ReferralReward[]
+  rewards        ReferralReward[]
+  qualifications ReferralQualification[]
+  campaign       ReferralCampaign?       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
 
   @@index([referrerUserId, status])
   @@map("referrals")
 }
 
 model ReferralReward {
-  id                  String    @id @default(uuid()) @db.Uuid
-  referralId          String    @db.Uuid
+  id                  String               @id @default(uuid()) @db.Uuid
+  referralId          String               @db.Uuid
   amountMinor         BigInt
-  currency            String    @db.Char(3)
-  ledgerTransactionId String?   @unique @db.Uuid
-  awardedAt           DateTime? @db.Timestamptz(6)
-  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  currency            String               @db.Char(3)
+  status              ReferralRewardStatus @default(PENDING)
+  idempotencyKey      String               @unique @db.VarChar(128)
+  ledgerTransactionId String?              @unique @db.Uuid
+  awardedAt           DateTime?            @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
 
   referral Referral @relation(fields: [referralId], references: [id], onDelete: Restrict)
 
   @@map("referral_rewards")
 }
 
+model ReferralCampaign {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  code                    String                 @db.VarChar(80)
+  version                 Int                    @default(1)
+  status                  ReferralCampaignStatus @default(DRAFT)
+  qualifyingProduct       String                 @db.VarChar(64)
+  qualifyingEvent         String                 @db.VarChar(100)
+  minimumTransactionCount Int                    @default(1)
+  minimumAmountMinor      BigInt?
+  requiredKycTier         KycTier                @default(TIER_1)
+  rewardAmountMinor       BigInt
+  rewardCurrency          String                 @db.Char(3)
+  maximumRewards          Int?
+  fraudRestrictions       Json
+  effectiveAt             DateTime               @db.Timestamptz(6)
+  expiresAt               DateTime?              @db.Timestamptz(6)
+  createdAt               DateTime               @default(now()) @db.Timestamptz(6)
+
+  referrals Referral[]
+
+  @@unique([code, version])
+  @@index([status, effectiveAt, expiresAt])
+  @@map("referral_campaigns")
+}
+
+model ReferralQualification {
+  id                 String    @id @default(uuid()) @db.Uuid
+  referralId         String    @db.Uuid
+  qualifyingEventId  String    @db.Uuid
+  qualifyingProduct  String    @db.VarChar(64)
+  qualifyingEvent    String    @db.VarChar(100)
+  settledAmountMinor BigInt
+  currency           String    @db.Char(3)
+  occurredAt         DateTime  @db.Timestamptz(6)
+  reversedAt         DateTime? @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+
+  referral Referral @relation(fields: [referralId], references: [id], onDelete: Restrict)
+
+  @@unique([referralId, qualifyingEventId])
+  @@index([referralId, occurredAt])
+  @@map("referral_qualifications")
+}
+
 model Notification {
-  id        String              @id @default(uuid()) @db.Uuid
-  userId    String              @db.Uuid
-  channel   NotificationChannel
-  template  String              @db.VarChar(100)
-  status    NotificationStatus  @default(PENDING)
-  payload   Json
-  dedupeKey String?             @unique @db.VarChar(191)
-  sentAt    DateTime?           @db.Timestamptz(6)
-  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @db.Uuid
+  channel         NotificationChannel
+  template        String              @db.VarChar(100)
+  status          NotificationStatus  @default(PENDING)
+  payload         Json
+  templateVersion Int                 @default(1)
+  dedupeKey       String?             @unique @db.VarChar(191)
+  sentAt          DateTime?           @db.Timestamptz(6)
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+
+  deliveries NotificationDelivery[]
 
   @@index([userId, status, createdAt])
   @@map("notifications")
 }
 
 model NotificationPreference {
-  id        String              @id @default(uuid()) @db.Uuid
-  userId    String              @db.Uuid
-  channel   NotificationChannel
-  topic     String              @db.VarChar(80)
-  enabled   Boolean             @default(true)
-  updatedAt DateTime            @updatedAt @db.Timestamptz(6)
+  id                     String              @id @default(uuid()) @db.Uuid
+  userId                 String              @db.Uuid
+  channel                NotificationChannel
+  topic                  String              @db.VarChar(80)
+  enabled                Boolean             @default(true)
+  quietHoursStartMinutes Int?
+  quietHoursEndMinutes   Int?
+  timezone               String              @default("Africa/Lagos") @db.VarChar(64)
+  updatedAt              DateTime            @updatedAt @db.Timestamptz(6)
 
   @@unique([userId, channel, topic])
   @@map("notification_preferences")
+}
+
+model NotificationTemplate {
+  id        String              @id @default(uuid()) @db.Uuid
+  key       String              @db.VarChar(100)
+  version   Int                 @default(1)
+  channel   NotificationChannel
+  subject   String?             @db.VarChar(200)
+  body      String
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+
+  @@unique([key, version, channel])
+  @@index([key, isActive])
+  @@map("notification_templates")
+}
+
+model NotificationDelivery {
+  id                String                     @id @default(uuid()) @db.Uuid
+  notificationId    String                     @db.Uuid
+  provider          String                     @db.VarChar(64)
+  providerReference String?                    @db.VarChar(191)
+  status            NotificationDeliveryStatus @default(PENDING)
+  attemptNumber     Int                        @default(1)
+  failureCode       String?                    @db.VarChar(64)
+  failureReason     String?                    @db.VarChar(500)
+  nextAttemptAt     DateTime?                  @db.Timestamptz(6)
+  sentAt            DateTime?                  @db.Timestamptz(6)
+  deliveredAt       DateTime?                  @db.Timestamptz(6)
+  createdAt         DateTime                   @default(now()) @db.Timestamptz(6)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+
+  @@unique([notificationId, attemptNumber])
+  @@index([status, nextAttemptAt])
+  @@index([provider, providerReference])
+  @@map("notification_deliveries")
 }
 
 model Dispute {

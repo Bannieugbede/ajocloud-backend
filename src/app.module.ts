@@ -18,6 +18,10 @@ import { LedgerModule } from './modules/ledger/ledger.module.js';
 import { PermissionsModule } from './modules/permissions/permissions.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { WalletsModule } from './modules/wallets/wallets.module.js';
+import { PublicConfigurationModule } from './modules/configuration/public-configuration.module.js';
+import { FoodCoordinatorApplicationsModule } from './modules/food-coordinator-applications/food-coordinator-applications.module.js';
+import { BillPaymentsModule } from './modules/bill-payments/bill-payments.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -42,6 +46,10 @@ import { WalletsModule } from './modules/wallets/wallets.module.js';
     AjoGroupsModule,
     LedgerModule,
     WalletsModule,
+    PublicConfigurationModule,
+    FoodCoordinatorApplicationsModule,
+    BillPaymentsModule,
+    NotificationsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

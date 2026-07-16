@@ -1,13 +1,15 @@
 model KycProfile {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @unique @db.Uuid
-  status      KycStatus @default(NOT_STARTED)
-  level       Int       @default(0)
-  providerRef String?   @unique @db.VarChar(191)
-  submittedAt DateTime? @db.Timestamptz(6)
-  verifiedAt  DateTime? @db.Timestamptz(6)
-  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @db.Uuid
+  status       KycStatus @default(NOT_STARTED)
+  tier         KycTier   @default(TIER_1)
+  level        Int       @default(1)
+  providerRef  String?   @unique @db.VarChar(191)
+  submittedAt  DateTime? @db.Timestamptz(6)
+  verifiedAt   DateTime? @db.Timestamptz(6)
+  restrictedAt DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
   user        User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
   checks      KycCheck[]
@@ -19,18 +21,27 @@ model KycProfile {
 }
 
 model KycCheck {
-  id           String         @id @default(uuid()) @db.Uuid
-  kycProfileId String         @db.Uuid
-  type         String         @db.VarChar(64)
-  status       KycCheckStatus @default(PENDING)
-  providerRef  String?        @unique @db.VarChar(191)
-  resultCode   String?        @db.VarChar(64)
-  checkedAt    DateTime?      @db.Timestamptz(6)
-  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  id               String           @id @default(uuid()) @db.Uuid
+  kycProfileId     String           @db.Uuid
+  type             VerificationType
+  provider         String           @db.VarChar(64)
+  status           KycCheckStatus   @default(PENDING)
+  providerRef      String?          @db.VarChar(191)
+  resultCode       String?          @db.VarChar(64)
+  maskedIdentifier String?          @db.VarChar(64)
+  resultSummary    Json?
+  failureReason    String?          @db.VarChar(500)
+  riskFlags        Json?
+  reviewerUserId   String?          @db.Uuid
+  submittedAt      DateTime         @default(now()) @db.Timestamptz(6)
+  checkedAt        DateTime?        @db.Timestamptz(6)
+  rawDataExpiresAt DateTime?        @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
 
   profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
 
-  @@index([kycProfileId, status])
+  @@unique([provider, providerRef])
+  @@index([kycProfileId, type, status])
   @@map("kyc_checks")
 }
 

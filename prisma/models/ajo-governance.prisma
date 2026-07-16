@@ -1,23 +1,35 @@
 model SwapRequest {
-  id                  String            @id @default(uuid()) @db.Uuid
-  groupId             String            @db.Uuid
-  requestedByMemberId String            @db.Uuid
-  fromSlotId          String            @db.Uuid
-  toSlotId            String            @db.Uuid
-  status              SwapRequestStatus @default(PENDING)
-  reason              String?           @db.VarChar(500)
-  scheduleVersion     Int
-  expiresAt           DateTime?         @db.Timestamptz(6)
-  decidedAt           DateTime?         @db.Timestamptz(6)
-  executedAt          DateTime?         @db.Timestamptz(6)
-  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+  id                       String            @id @default(uuid()) @db.Uuid
+  groupId                  String            @db.Uuid
+  requestedByMemberId      String            @db.Uuid
+  initiatedByUserId        String            @db.Uuid
+  initiatorType            SwapInitiatorType @default(MEMBER)
+  fromSlotId               String            @db.Uuid
+  toSlotId                 String            @db.Uuid
+  originalFromPosition     Int
+  originalToPosition       Int
+  proposedFromPosition     Int
+  proposedToPosition       Int
+  status                   SwapRequestStatus @default(PENDING)
+  reason                   String?           @db.VarChar(500)
+  previousScheduleVersion  Int
+  scheduleVersion          Int
+  resultingScheduleVersion Int?
+  reviewedByUserId         String?           @db.Uuid
+  reviewNotes              String?           @db.VarChar(1000)
+  feeAssessmentId          String?           @unique @db.Uuid
+  expiresAt                DateTime?         @db.Timestamptz(6)
+  decidedAt                DateTime?         @db.Timestamptz(6)
+  executedAt               DateTime?         @db.Timestamptz(6)
+  createdAt                DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(6)
 
-  group       AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  requestedBy AjoGroupMember @relation("SwapRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
-  fromSlot    AjoSlot        @relation("SwapFromSlot", fields: [fromSlotId], references: [id], onDelete: Restrict)
-  toSlot      AjoSlot        @relation("SwapToSlot", fields: [toSlotId], references: [id], onDelete: Restrict)
-  approvals   SwapApproval[]
+  group         AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  requestedBy   AjoGroupMember @relation("SwapRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
+  fromSlot      AjoSlot        @relation("SwapFromSlot", fields: [fromSlotId], references: [id], onDelete: Restrict)
+  toSlot        AjoSlot        @relation("SwapToSlot", fields: [toSlotId], references: [id], onDelete: Restrict)
+  approvals     SwapApproval[]
+  feeAssessment FeeAssessment? @relation(fields: [feeAssessmentId], references: [id], onDelete: Restrict)
 
   @@index([groupId, status, createdAt])
   @@index([requestedByMemberId, status])

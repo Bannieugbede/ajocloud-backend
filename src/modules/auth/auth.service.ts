@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { hash, verify, argon2id } from 'argon2';
 import { createHmac, randomBytes } from 'node:crypto';
-import { SessionStatus, UserStatus } from '../../../generated/prisma/enums.js';
+import {
+  AccountType,
+  FinancialAccountPurpose,
+  SessionStatus,
+  UserStatus,
+} from '../../../generated/prisma/enums.js';
 import type { Environment } from '../../config/env.schema.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
@@ -63,6 +68,29 @@ export class AuthService {
             wallets: { create: { currency: 'NGN' } },
             roleAssignments: { create: { roleId: memberRole.id } },
           },
+        });
+        const wallet = await tx.wallet.findUniqueOrThrow({
+          where: { userId_currency: { userId: created.id, currency: 'NGN' } },
+        });
+        await tx.financialAccount.createMany({
+          data: [
+            {
+              code: `WALLET:${wallet.id}:AVAILABLE`,
+              name: 'Wallet available balance',
+              type: AccountType.LIABILITY,
+              purpose: FinancialAccountPurpose.WALLET_AVAILABLE,
+              currency: wallet.currency,
+              walletId: wallet.id,
+            },
+            {
+              code: `WALLET:${wallet.id}:RESERVED`,
+              name: 'Wallet reserved balance',
+              type: AccountType.LIABILITY,
+              purpose: FinancialAccountPurpose.WALLET_RESERVED,
+              currency: wallet.currency,
+              walletId: wallet.id,
+            },
+          ],
         });
         await tx.auditLog.create({
           data: {

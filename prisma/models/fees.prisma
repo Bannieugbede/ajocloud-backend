@@ -1,32 +1,46 @@
 model FeeDefinition {
   id              String             @id @default(uuid()) @db.Uuid
-  code            String             @unique @db.VarChar(80)
+  code            String             @db.VarChar(80)
+  version         Int                @default(1)
   name            String             @db.VarChar(160)
   calculationType FeeCalculationType
   amountMinor     BigInt?
   basisPoints     Int?
   currency        String?            @db.Char(3)
+  minimumMinor    BigInt?
+  maximumMinor    BigInt?
+  payerType       String             @db.VarChar(64)
+  chargeEvent     String             @db.VarChar(80)
+  refundable      Boolean            @default(false)
+  taxTreatment    String?            @db.VarChar(120)
+  effectiveAt     DateTime           @db.Timestamptz(6)
+  expiresAt       DateTime?          @db.Timestamptz(6)
   isActive        Boolean            @default(true)
   createdAt       DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
 
   assessments FeeAssessment[]
 
+  @@unique([code, version])
+  @@index([code, isActive, effectiveAt])
   @@map("fee_definitions")
 }
 
 model FeeAssessment {
-  id                  String              @id @default(uuid()) @db.Uuid
-  feeDefinitionId     String              @db.Uuid
-  subjectType         String              @db.VarChar(64)
-  subjectId           String              @db.Uuid
-  amountMinor         BigInt
-  currency            String              @db.Char(3)
-  status              FeeAssessmentStatus @default(PENDING)
-  ledgerTransactionId String?             @db.Uuid
-  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
+  id                   String              @id @default(uuid()) @db.Uuid
+  feeDefinitionId      String              @db.Uuid
+  subjectType          String              @db.VarChar(64)
+  subjectId            String              @db.Uuid
+  amountMinor          BigInt
+  currency             String              @db.Char(3)
+  status               FeeAssessmentStatus @default(PENDING)
+  ledgerTransactionId  String?             @db.Uuid
+  ruleSnapshot         Json
+  calculationBaseMinor BigInt?
+  createdAt            DateTime            @default(now()) @db.Timestamptz(6)
 
-  definition FeeDefinition @relation(fields: [feeDefinitionId], references: [id], onDelete: Restrict)
+  definition  FeeDefinition @relation(fields: [feeDefinitionId], references: [id], onDelete: Restrict)
+  swapRequest SwapRequest?
 
   @@index([subjectType, subjectId])
   @@map("fee_assessments")

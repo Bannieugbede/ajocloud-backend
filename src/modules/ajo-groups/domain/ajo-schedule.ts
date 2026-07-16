@@ -10,9 +10,15 @@ export interface SlotInput {
 export interface RotationCycle {
   readonly sequence: number;
   readonly contributionDueAt: Date;
+  readonly contributionOpensAt: Date;
+  readonly contributionClosesAt: Date;
+  readonly graceEndsAt: Date;
+  readonly payoutEligibilityCutoffAt: Date;
   readonly payoutDueAt: Date;
+  readonly payoutProcessingEndsAt: Date;
   readonly payoutSlotId: string;
   readonly contributionAmountMinor: bigint;
+  readonly payoutUnitCount: number;
   readonly payoutAmountMinor: bigint;
 }
 
@@ -38,6 +44,12 @@ export function generateRotationSchedule(input: {
   readonly endDate: Date;
   readonly frequency: AjoFrequency;
   readonly contributionAmountMinor: bigint;
+  readonly contributionOpenOffsetMinutes?: number;
+  readonly contributionCloseOffsetMinutes?: number;
+  readonly gracePeriodMinutes?: number;
+  readonly payoutEligibilityCutoffMinutes?: number;
+  readonly payoutOffsetMinutes?: number;
+  readonly payoutProcessingWindowMinutes?: number;
 }): readonly RotationCycle[] {
   if (input.slots.length < 2 || input.slots.length > MAX_SLOTS) {
     throw new UnprocessableEntityException('A locked group requires 2 to 1,000 slots');
@@ -62,15 +74,30 @@ export function generateRotationSchedule(input: {
         'The rotation cannot complete within the configured dates',
       );
     }
+    const contributionOpensAt = addMinutes(dueAt, -(input.contributionOpenOffsetMinutes ?? 0));
+    const contributionClosesAt = addMinutes(dueAt, input.contributionCloseOffsetMinutes ?? 0);
+    const graceEndsAt = addMinutes(contributionClosesAt, input.gracePeriodMinutes ?? 0);
+    const payoutEligibilityCutoffAt = addMinutes(dueAt, input.payoutEligibilityCutoffMinutes ?? 0);
+    const payoutDueAt = addMinutes(dueAt, input.payoutOffsetMinutes ?? 0);
     return {
       sequence: index + 1,
       contributionDueAt: dueAt,
-      payoutDueAt: dueAt,
+      contributionOpensAt,
+      contributionClosesAt,
+      graceEndsAt,
+      payoutEligibilityCutoffAt,
+      payoutDueAt,
+      payoutProcessingEndsAt: addMinutes(payoutDueAt, input.payoutProcessingWindowMinutes ?? 1_440),
       payoutSlotId: slot.id,
+      payoutUnitCount: 1,
       contributionAmountMinor: input.contributionAmountMinor,
       payoutAmountMinor,
     };
   });
+}
+
+function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * 60_000);
 }
 
 function addFrequency(start: Date, frequency: AjoFrequency, offset: number): Date {

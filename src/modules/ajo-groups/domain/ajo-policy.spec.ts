@@ -1,5 +1,10 @@
 import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
-import { assertAllSwapApprovals, assertScheduleCanChange } from './ajo-policy.js';
+import {
+  assertAllSwapApprovals,
+  assertPayoutAllowsSwap,
+  assertScheduleCanChange,
+  assertSwapNotExpired,
+} from './ajo-policy.js';
 
 describe('Ajo schedule policy', () => {
   it('rejects schedule changes after lock', () => {
@@ -29,4 +34,17 @@ describe('Ajo schedule policy', () => {
       ),
     ).not.toThrow();
   });
+
+  it('rejects an expired swap request', () => {
+    expect(() =>
+      assertSwapNotExpired(new Date('2026-01-01T00:00:00Z'), new Date('2026-01-02T00:00:00Z')),
+    ).toThrow(ConflictException);
+  });
+
+  it.each(['PROCESSING', 'PAID', 'FAILED', 'CANCELLED'])(
+    'rejects a swap after payout status becomes %s',
+    (status) => {
+      expect(() => assertPayoutAllowsSwap(status)).toThrow(ConflictException);
+    },
+  );
 });

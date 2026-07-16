@@ -1,0 +1,200 @@
+model BillCategory {
+  id           String            @id @default(uuid()) @db.Uuid
+  provider     String            @db.VarChar(64)
+  providerCode String            @db.VarChar(100)
+  name         String            @db.VarChar(160)
+  status       BillCatalogStatus @default(ACTIVE)
+  catalogData  Json?
+  refreshedAt  DateTime          @db.Timestamptz(6)
+  expiresAt    DateTime          @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(6)
+
+  billers BillBiller[]
+
+  @@unique([provider, providerCode])
+  @@index([status, expiresAt])
+  @@map("bill_categories")
+}
+
+model BillBiller {
+  id           String            @id @default(uuid()) @db.Uuid
+  categoryId   String            @db.Uuid
+  providerCode String            @db.VarChar(100)
+  name         String            @db.VarChar(160)
+  status       BillCatalogStatus @default(ACTIVE)
+  catalogData  Json?
+  refreshedAt  DateTime          @db.Timestamptz(6)
+  expiresAt    DateTime          @db.Timestamptz(6)
+
+  category BillCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  products BillProduct[]
+  payments BillPayment[]
+
+  @@unique([categoryId, providerCode])
+  @@index([categoryId, status])
+  @@map("bill_billers")
+}
+
+model BillProduct {
+  id               String            @id @default(uuid()) @db.Uuid
+  billerId         String            @db.Uuid
+  providerCode     String            @db.VarChar(100)
+  name             String            @db.VarChar(160)
+  status           BillCatalogStatus @default(ACTIVE)
+  minimumMinor     BigInt?
+  maximumMinor     BigInt?
+  fixedAmountMinor BigInt?
+  currency         String            @default("NGN") @db.Char(3)
+  catalogData      Json?
+
+  biller   BillBiller    @relation(fields: [billerId], references: [id], onDelete: Restrict)
+  payments BillPayment[]
+
+  @@unique([billerId, providerCode])
+  @@index([billerId, status])
+  @@map("bill_products")
+}
+
+model BillCustomerValidation {
+  id                      String   @id @default(uuid()) @db.Uuid
+  userId                  String   @db.Uuid
+  billerId                String   @db.Uuid
+  productId               String?  @db.Uuid
+  provider                String   @db.VarChar(64)
+  providerReference       String?  @db.VarChar(191)
+  customerReferenceDigest String   @db.VarChar(128)
+  customerReferenceMasked String   @db.VarChar(64)
+  verifiedCustomerName    String?  @db.VarChar(200)
+  resultSummary           Json?
+  valid                   Boolean
+  expiresAt               DateTime @db.Timestamptz(6)
+  createdAt               DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, billerId, expiresAt])
+  @@index([provider, providerReference])
+  @@map("bill_customer_validations")
+}
+
+model BillPayment {
+  id                          String              @id @default(uuid()) @db.Uuid
+  internalReference           String              @unique @db.VarChar(80)
+  provider                    String              @db.VarChar(64)
+  providerReference           String?             @db.VarChar(191)
+  idempotencyKey              String              @db.VarChar(128)
+  requestHash                 String              @db.VarChar(128)
+  userId                      String              @db.Uuid
+  walletId                    String              @db.Uuid
+  billerId                    String              @db.Uuid
+  productId                   String?             @db.Uuid
+  validationId                String?             @db.Uuid
+  customerReferenceDigest     String              @db.VarChar(128)
+  customerReferenceMasked     String              @db.VarChar(64)
+  verifiedCustomerName        String?             @db.VarChar(200)
+  amountMinor                 BigInt
+  feeMinor                    BigInt              @default(0)
+  totalDebitMinor             BigInt
+  currency                    String              @db.Char(3)
+  status                      BillPaymentStatus   @default(CREATED)
+  providerStatus              String?             @db.VarChar(80)
+  reconciliationState         ReconciliationState @default(NOT_REQUIRED)
+  failureCode                 String?             @db.VarChar(64)
+  failureReason               String?             @db.VarChar(500)
+  metadata                    Json?
+  reserveLedgerTransactionId  String?             @db.Uuid
+  ledgerTransactionId         String?             @db.Uuid
+  releaseLedgerTransactionId  String?             @db.Uuid
+  reversalLedgerTransactionId String?             @db.Uuid
+  createdAt                   DateTime            @default(now()) @db.Timestamptz(6)
+  validatedAt                 DateTime?           @db.Timestamptz(6)
+  processingAt                DateTime?           @db.Timestamptz(6)
+  completedAt                 DateTime?           @db.Timestamptz(6)
+  failedAt                    DateTime?           @db.Timestamptz(6)
+  reversedAt                  DateTime?           @db.Timestamptz(6)
+  updatedAt                   DateTime            @updatedAt @db.Timestamptz(6)
+
+  wallet    Wallet                     @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  biller    BillBiller                 @relation(fields: [billerId], references: [id], onDelete: Restrict)
+  product   BillProduct?               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  attempts  BillPaymentAttempt[]
+  events    BillPaymentProviderEvent[]
+  reversals BillPaymentReversal[]
+  receipt   BillPaymentReceipt?
+
+  @@unique([userId, idempotencyKey])
+  @@index([provider, providerReference])
+  @@index([userId, status, createdAt])
+  @@index([walletId, status, createdAt])
+  @@index([reconciliationState, updatedAt])
+  @@map("bill_payments")
+}
+
+model BillPaymentAttempt {
+  id                String                   @id @default(uuid()) @db.Uuid
+  billPaymentId     String                   @db.Uuid
+  attemptNumber     Int
+  providerReference String?                  @db.VarChar(191)
+  status            BillPaymentAttemptStatus @default(PENDING)
+  requestHash       String                   @db.VarChar(128)
+  responseSummary   Json?
+  failureCode       String?                  @db.VarChar(64)
+  startedAt         DateTime                 @default(now()) @db.Timestamptz(6)
+  completedAt       DateTime?                @db.Timestamptz(6)
+
+  payment BillPayment @relation(fields: [billPaymentId], references: [id], onDelete: Restrict)
+
+  @@unique([billPaymentId, attemptNumber])
+  @@index([providerReference])
+  @@map("bill_payment_attempts")
+}
+
+model BillPaymentProviderEvent {
+  id              String                @id @default(uuid()) @db.Uuid
+  billPaymentId   String?               @db.Uuid
+  provider        String                @db.VarChar(64)
+  providerEventId String                @db.VarChar(191)
+  payloadHash     String                @db.VarChar(128)
+  signatureHash   String?               @db.VarChar(128)
+  status          EventProcessingStatus @default(PENDING)
+  resultSummary   Json?
+  failureReason   String?               @db.VarChar(500)
+  receivedAt      DateTime              @default(now()) @db.Timestamptz(6)
+  processedAt     DateTime?             @db.Timestamptz(6)
+
+  payment BillPayment? @relation(fields: [billPaymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([billPaymentId, receivedAt])
+  @@index([status, receivedAt])
+  @@map("bill_payment_provider_events")
+}
+
+model BillPaymentReversal {
+  id                  String    @id @default(uuid()) @db.Uuid
+  billPaymentId       String    @db.Uuid
+  providerReference   String?   @db.VarChar(191)
+  amountMinor         BigInt
+  currency            String    @db.Char(3)
+  reason              String    @db.VarChar(500)
+  idempotencyKey      String    @unique @db.VarChar(128)
+  ledgerTransactionId String?   @unique @db.Uuid
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt         DateTime? @db.Timestamptz(6)
+
+  payment BillPayment @relation(fields: [billPaymentId], references: [id], onDelete: Restrict)
+
+  @@index([billPaymentId, createdAt])
+  @@map("bill_payment_reversals")
+}
+
+model BillPaymentReceipt {
+  id            String   @id @default(uuid()) @db.Uuid
+  billPaymentId String   @unique @db.Uuid
+  receiptNumber String   @unique @db.VarChar(80)
+  snapshot      Json
+  issuedAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  payment BillPayment @relation(fields: [billPaymentId], references: [id], onDelete: Restrict)
+
+  @@map("bill_payment_receipts")
+}

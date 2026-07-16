@@ -25,15 +25,19 @@ model User {
 }
 
 model UserProfile {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @unique @db.Uuid
-  firstName String   @db.VarChar(100)
-  lastName  String   @db.VarChar(100)
-  avatarUrl String?  @db.VarChar(2048)
-  timezone  String   @default("Africa/Lagos") @db.VarChar(64)
-  locale    String   @default("en-NG") @db.VarChar(16)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  firstName   String    @db.VarChar(100)
+  lastName    String    @db.VarChar(100)
+  otherNames  String?   @db.VarChar(160)
+  dateOfBirth DateTime? @db.Date
+  country     String    @default("NG") @db.Char(2)
+  state       String?   @db.VarChar(100)
+  avatarUrl   String?   @db.VarChar(2048)
+  timezone    String    @default("Africa/Lagos") @db.VarChar(64)
+  locale      String    @default("en-NG") @db.VarChar(16)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

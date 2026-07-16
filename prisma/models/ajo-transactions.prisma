@@ -13,6 +13,9 @@ model Contribution {
   failureCode         String?            @db.VarChar(64)
   failureReason       String?            @db.VarChar(500)
   processedAt         DateTime?          @db.Timestamptz(6)
+  paidAt              DateTime?          @db.Timestamptz(6)
+  gatewayConfirmedAt  DateTime?          @db.Timestamptz(6)
+  allocatedAt         DateTime?          @db.Timestamptz(6)
   createdAt           DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
 
@@ -44,6 +47,12 @@ model Payout {
   failureCode         String?      @db.VarChar(64)
   failureReason       String?      @db.VarChar(500)
   processedAt         DateTime?    @db.Timestamptz(6)
+  scheduledAt         DateTime?    @db.Timestamptz(6)
+  approvedAt          DateTime?    @db.Timestamptz(6)
+  initiatedAt         DateTime?    @db.Timestamptz(6)
+  completedAt         DateTime?    @db.Timestamptz(6)
+  failedAt            DateTime?    @db.Timestamptz(6)
+  reversedAt          DateTime?    @db.Timestamptz(6)
   createdAt           DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime     @updatedAt @db.Timestamptz(6)
 

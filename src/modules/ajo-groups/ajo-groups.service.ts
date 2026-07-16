@@ -8,6 +8,7 @@ import {
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   AjoCycleStatus,
+  AjoContributionMode,
   AjoGroupStatus,
   AjoMemberRole,
   AjoMemberStatus,
@@ -33,9 +34,23 @@ export class AjoGroupsService {
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
     assertAjoGroupBounds(startDate, endDate, dto.maxSlots);
+    if (dto.minSlotsPerMember > dto.maxSlotsPerMember) {
+      throw new UnprocessableEntityException('Minimum slots cannot exceed maximum slots');
+    }
+    if (dto.requestedSlots < dto.minSlotsPerMember || dto.requestedSlots > dto.maxSlotsPerMember) {
+      throw new UnprocessableEntityException('Requested slots violate per-member limits');
+    }
     if (dto.requestedSlots > dto.maxSlots) {
       throw new UnprocessableEntityException('Requested slots exceed group capacity');
     }
+    const contributionUnitMinor =
+      dto.contributionMode === AjoContributionMode.FLEXIBLE_UNIT
+        ? dto.contributionUnitMinor
+        : dto.baseContributionMinor;
+    if (!contributionUnitMinor) {
+      throw new UnprocessableEntityException('Flexible Ajo requires a contribution unit');
+    }
+    const unitMinor = BigInt(contributionUnitMinor);
     const invitationCode = randomBytes(32).toString('base64url');
     const tokenDigest = this.digest(invitationCode);
     const created = await this.transactions.serializable(async (tx) => {
@@ -43,9 +58,23 @@ export class AjoGroupsService {
         data: {
           name: dto.name.trim(),
           contributionFrequency: dto.contributionFrequency,
-          baseContributionMinor: BigInt(dto.baseContributionMinor),
+          contributionMode: dto.contributionMode,
+          baseContributionMinor: unitMinor,
+          contributionUnitMinor:
+            dto.contributionMode === AjoContributionMode.FLEXIBLE_UNIT ? unitMinor : null,
           currency: 'NGN',
+          maxMembers: dto.maxMembers,
           maxSlots: dto.maxSlots,
+          minSlotsPerMember: dto.minSlotsPerMember,
+          maxSlotsPerMember: dto.maxSlotsPerMember,
+          businessTimezone: dto.businessTimezone,
+          contributionOpenOffsetMinutes: dto.contributionOpenOffsetMinutes,
+          contributionCloseOffsetMinutes: dto.contributionCloseOffsetMinutes,
+          gracePeriodMinutes: dto.gracePeriodMinutes,
+          lateThresholdMinutes: dto.lateThresholdMinutes,
+          payoutEligibilityCutoffMinutes: dto.payoutEligibilityCutoffMinutes,
+          payoutOffsetMinutes: dto.payoutOffsetMinutes,
+          payoutProcessingWindowMinutes: dto.payoutProcessingWindowMinutes,
           startDate,
           endDate,
           createdByUserId: userId,
@@ -67,6 +96,19 @@ export class AjoGroupsService {
           position: index + 1,
           status: AjoSlotStatus.RESERVED,
         })),
+      });
+      await tx.ajoContributionPlan.create({
+        data: {
+          groupId: group.id,
+          memberId: admin.id,
+          contributionUnitMinor: unitMinor,
+          unitQuantity: dto.requestedSlots,
+          expectedPerCycleMinor: unitMinor * BigInt(dto.requestedSlots),
+          totalExpectedMinor: 0n,
+          outstandingMinor: 0n,
+          expectedEntitlementMinor: unitMinor * BigInt(dto.requestedSlots),
+          currency: group.currency,
+        },
       });
       await tx.groupInvitation.create({
         data: {
@@ -99,9 +141,11 @@ export class AjoGroupsService {
         name: true,
         status: true,
         contributionFrequency: true,
+        contributionMode: true,
         baseContributionMinor: true,
         currency: true,
         maxSlots: true,
+        maxMembers: true,
         startDate: true,
         endDate: true,
         _count: { select: { slots: true, members: true } },
@@ -120,9 +164,14 @@ export class AjoGroupsService {
         description: true,
         status: true,
         contributionFrequency: true,
+        contributionMode: true,
         baseContributionMinor: true,
         currency: true,
         maxSlots: true,
+        maxMembers: true,
+        minSlotsPerMember: true,
+        maxSlotsPerMember: true,
+        businessTimezone: true,
         startDate: true,
         endDate: true,
         lockedAt: true,
@@ -146,7 +195,14 @@ export class AjoGroupsService {
     return this.transactions.serializable(async (tx) => {
       const group = await tx.ajoGroup.findUnique({
         where: { id: groupId },
-        include: { _count: { select: { slots: true } } },
+        include: {
+          _count: {
+            select: {
+              slots: true,
+              members: { where: { status: AjoMemberStatus.ACTIVE } },
+            },
+          },
+        },
       });
       if (!group) throw new NotFoundException('Ajo group was not found');
       if (group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
@@ -165,6 +221,15 @@ export class AjoGroupsService {
       if (group._count.slots + dto.requestedSlots > group.maxSlots) {
         throw new ConflictException('Requested slots exceed remaining group capacity');
       }
+      if (group._count.members >= group.maxMembers) {
+        throw new ConflictException('Group member capacity has been reached');
+      }
+      if (
+        dto.requestedSlots < group.minSlotsPerMember ||
+        dto.requestedSlots > group.maxSlotsPerMember
+      ) {
+        throw new ConflictException('Requested slots violate this group’s per-member limits');
+      }
       const member = await tx.ajoGroupMember.create({
         data: { groupId, userId, status: AjoMemberStatus.ACTIVE, joinedAt: new Date() },
       });
@@ -175,6 +240,20 @@ export class AjoGroupsService {
           position: group._count.slots + index + 1,
           status: AjoSlotStatus.RESERVED,
         })),
+      });
+      const unitMinor = group.contributionUnitMinor ?? group.baseContributionMinor;
+      await tx.ajoContributionPlan.create({
+        data: {
+          groupId,
+          memberId: member.id,
+          contributionUnitMinor: unitMinor,
+          unitQuantity: dto.requestedSlots,
+          expectedPerCycleMinor: unitMinor * BigInt(dto.requestedSlots),
+          totalExpectedMinor: 0n,
+          outstandingMinor: 0n,
+          expectedEntitlementMinor: unitMinor * BigInt(dto.requestedSlots),
+          currency: group.currency,
+        },
       });
       await tx.groupInvitation.update({
         where: { id: invitation.id },
@@ -207,7 +286,11 @@ export class AjoGroupsService {
       }
       const group = await tx.ajoGroup.findUnique({
         where: { id: groupId },
-        include: { slots: { orderBy: { position: 'asc' } } },
+        include: {
+          slots: { orderBy: { position: 'asc' } },
+          contributionPlans: { orderBy: { createdAt: 'asc' } },
+          members: { where: { status: AjoMemberStatus.ACTIVE }, select: { id: true } },
+        },
       });
       if (!group) throw new NotFoundException('Ajo group was not found');
       if (group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
@@ -220,7 +303,23 @@ export class AjoGroupsService {
         endDate: group.endDate,
         frequency: group.contributionFrequency,
         contributionAmountMinor: group.baseContributionMinor,
+        contributionOpenOffsetMinutes: group.contributionOpenOffsetMinutes,
+        contributionCloseOffsetMinutes: group.contributionCloseOffsetMinutes,
+        gracePeriodMinutes: group.gracePeriodMinutes,
+        payoutEligibilityCutoffMinutes: group.payoutEligibilityCutoffMinutes,
+        payoutOffsetMinutes: group.payoutOffsetMinutes,
+        payoutProcessingWindowMinutes: group.payoutProcessingWindowMinutes,
       });
+      if (group.members.length > group.maxMembers) {
+        throw new UnprocessableEntityException('Active member count exceeds group capacity');
+      }
+      if (
+        group.contributionPlans.length !== group.members.length ||
+        group.contributionPlans.reduce((sum, plan) => sum + plan.unitQuantity, 0) !==
+          group.slots.length
+      ) {
+        throw new UnprocessableEntityException('Contribution plans do not match active slots');
+      }
       const now = new Date();
       for (const cycle of schedule) {
         const cycleId = randomUUID();
@@ -231,7 +330,12 @@ export class AjoGroupsService {
             sequence: cycle.sequence,
             status: AjoCycleStatus.PENDING,
             contributionDueAt: cycle.contributionDueAt,
+            contributionOpensAt: cycle.contributionOpensAt,
+            contributionClosesAt: cycle.contributionClosesAt,
+            graceEndsAt: cycle.graceEndsAt,
+            payoutEligibilityCutoffAt: cycle.payoutEligibilityCutoffAt,
             payoutDueAt: cycle.payoutDueAt,
+            payoutProcessingEndsAt: cycle.payoutProcessingEndsAt,
           },
         });
         await tx.contributionSchedule.createMany({
@@ -265,6 +369,44 @@ export class AjoGroupsService {
         where: { groupId },
         data: { status: AjoSlotStatus.ACTIVE, activatedAt: now },
       });
+      for (const plan of group.contributionPlans) {
+        const totalExpectedMinor = plan.expectedPerCycleMinor * BigInt(schedule.length);
+        await tx.ajoContributionPlan.update({
+          where: { id: plan.id },
+          data: {
+            totalExpectedMinor,
+            outstandingMinor: totalExpectedMinor,
+            expectedEntitlementMinor:
+              group.baseContributionMinor * BigInt(group.slots.length) * BigInt(plan.unitQuantity),
+            lockedAt: now,
+          },
+        });
+      }
+      await tx.ajoScheduleVersion.create({
+        data: {
+          groupId,
+          version: scheduleVersion,
+          reason: 'INITIAL_LOCK',
+          createdByUserId: userId,
+          snapshot: {
+            contributionMode: group.contributionMode,
+            contributionUnitMinor: (
+              group.contributionUnitMinor ?? group.baseContributionMinor
+            ).toString(),
+            memberCount: group.members.length,
+            slotCount: group.slots.length,
+            cycleCount: schedule.length,
+            totalExpectedInflowMinor: (
+              group.baseContributionMinor *
+              BigInt(group.slots.length) *
+              BigInt(schedule.length)
+            ).toString(),
+            totalExpectedOutflowMinor: schedule
+              .reduce((sum, cycle) => sum + cycle.payoutAmountMinor, 0n)
+              .toString(),
+          },
+        },
+      });
       const locked = await tx.ajoGroup.update({
         where: { id: groupId },
         data: { status: AjoGroupStatus.LOCKED, lockedAt: now, scheduleVersion },
@@ -285,6 +427,11 @@ export class AjoGroupsService {
 
   async schedule(userId: string, groupId: string): Promise<unknown> {
     const membership = await this.requireMembership(userId, groupId);
+    const group = await this.prisma.ajoGroup.findUnique({
+      where: { id: groupId },
+      select: { scheduleVersion: true },
+    });
+    if (!group) throw new NotFoundException('Ajo group was not found');
     return this.prisma.ajoCycle.findMany({
       where: { groupId },
       select: {
@@ -305,7 +452,8 @@ export class AjoGroupsService {
             status: true,
           },
         },
-        payoutSchedule: {
+        payoutSchedules: {
+          where: { scheduleVersion: group.scheduleVersion },
           select: {
             slotId: true,
             amountDueMinor: true,

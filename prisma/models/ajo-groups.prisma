@@ -1,25 +1,39 @@
 model AjoGroup {
-  id                    String                @id @default(uuid()) @db.Uuid
-  organisationId        String?               @db.Uuid
-  name                  String                @db.VarChar(160)
-  description           String?               @db.VarChar(1000)
-  status                AjoGroupStatus        @default(DRAFT)
-  contributionFrequency ContributionFrequency
-  baseContributionMinor BigInt
-  currency              String                @default("NGN") @db.Char(3)
-  maxSlots              Int
-  startDate             DateTime              @db.Date
-  endDate               DateTime              @db.Date
-  createdByUserId       String                @db.Uuid
-  scheduleVersion       Int                   @default(0)
-  lockedAt              DateTime?             @db.Timestamptz(6)
-  activatedAt           DateTime?             @db.Timestamptz(6)
-  completedAt           DateTime?             @db.Timestamptz(6)
-  suspendedAt           DateTime?             @db.Timestamptz(6)
-  cancelledAt           DateTime?             @db.Timestamptz(6)
-  createdAt             DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt             DateTime              @updatedAt @db.Timestamptz(6)
-  deletedAt             DateTime?             @db.Timestamptz(6)
+  id                             String                @id @default(uuid()) @db.Uuid
+  organisationId                 String?               @db.Uuid
+  name                           String                @db.VarChar(160)
+  description                    String?               @db.VarChar(1000)
+  status                         AjoGroupStatus        @default(DRAFT)
+  contributionMode               AjoContributionMode   @default(FIXED)
+  contributionFrequency          ContributionFrequency
+  baseContributionMinor          BigInt
+  contributionUnitMinor          BigInt?
+  currency                       String                @default("NGN") @db.Char(3)
+  maxMembers                     Int                   @default(1000)
+  maxSlots                       Int
+  minSlotsPerMember              Int                   @default(1)
+  maxSlotsPerMember              Int                   @default(100)
+  numberOfCycles                 Int?
+  businessTimezone               String                @default("Africa/Lagos") @db.VarChar(64)
+  contributionOpenOffsetMinutes  Int                   @default(0)
+  contributionCloseOffsetMinutes Int                   @default(0)
+  gracePeriodMinutes             Int                   @default(0)
+  lateThresholdMinutes           Int                   @default(0)
+  payoutEligibilityCutoffMinutes Int                   @default(0)
+  payoutProcessingWindowMinutes  Int                   @default(1440)
+  payoutOffsetMinutes            Int                   @default(0)
+  startDate                      DateTime              @db.Date
+  endDate                        DateTime              @db.Date
+  createdByUserId                String                @db.Uuid
+  scheduleVersion                Int                   @default(0)
+  lockedAt                       DateTime?             @db.Timestamptz(6)
+  activatedAt                    DateTime?             @db.Timestamptz(6)
+  completedAt                    DateTime?             @db.Timestamptz(6)
+  suspendedAt                    DateTime?             @db.Timestamptz(6)
+  cancelledAt                    DateTime?             @db.Timestamptz(6)
+  createdAt                      DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                      DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt                      DateTime?             @db.Timestamptz(6)
 
   members               AjoGroupMember[]
   slots                 AjoSlot[]
@@ -33,10 +47,13 @@ model AjoGroup {
   penaltyRecords        PenaltyRecord[]
   invitations           GroupInvitation[]
   referralCodes         GroupReferralCode[]
+  contributionPlans     AjoContributionPlan[]
+  scheduleVersions      AjoScheduleVersion[]
 
   @@index([organisationId, status])
   @@index([createdByUserId])
   @@index([status, startDate])
+  @@index([contributionMode, status])
   @@map("ajo_groups")
 }
 
@@ -52,21 +69,45 @@ model AjoGroupMember {
   createdAt   DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
 
-  group               AjoGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  group               AjoGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
   slots               AjoSlot[]
   contributions       Contribution[]
   payouts             Payout[]
-  requestedSwaps      SwapRequest[]       @relation("SwapRequester")
+  requestedSwaps      SwapRequest[]        @relation("SwapRequester")
   swapApprovals       SwapApproval[]
-  assessedPenalties   PenaltyRecord[]     @relation("PenaltyMember")
-  assessedByPenalties PenaltyRecord[]     @relation("PenaltyAssessor")
+  assessedPenalties   PenaltyRecord[]      @relation("PenaltyMember")
+  assessedByPenalties PenaltyRecord[]      @relation("PenaltyAssessor")
   createdInvitations  GroupInvitation[]
   ownedReferralCodes  GroupReferralCode[]
+  contributionPlan    AjoContributionPlan?
 
   @@unique([groupId, userId])
   @@index([userId, status])
   @@index([groupId, role, status])
   @@map("ajo_group_members")
+}
+
+model AjoContributionPlan {
+  id                       String    @id @default(uuid()) @db.Uuid
+  groupId                  String    @db.Uuid
+  memberId                 String    @unique @db.Uuid
+  contributionUnitMinor    BigInt
+  unitQuantity             Int
+  expectedPerCycleMinor    BigInt
+  totalExpectedMinor       BigInt
+  actualPaidMinor          BigInt    @default(0)
+  outstandingMinor         BigInt
+  expectedEntitlementMinor BigInt
+  currency                 String    @db.Char(3)
+  lockedAt                 DateTime? @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(6)
+
+  group  AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  member AjoGroupMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, lockedAt])
+  @@map("ajo_contribution_plans")
 }
 
 model AjoSlot {
@@ -85,7 +126,7 @@ model AjoSlot {
   group                 AjoGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
   member                AjoGroupMember         @relation(fields: [memberId], references: [id], onDelete: Restrict)
   contributionSchedules ContributionSchedule[]
-  payoutSchedule        PayoutSchedule?
+  payoutSchedules       PayoutSchedule[]
   contributions         Contribution[]
   payouts               Payout[]
   outgoingSwapRequests  SwapRequest[]          @relation("SwapFromSlot")

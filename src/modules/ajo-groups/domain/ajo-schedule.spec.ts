@@ -47,9 +47,46 @@ describe('Ajo rotation schedule', () => {
     );
   });
 
+  it('supports more than 100 payout positions within the approved lifecycle', () => {
+    const schedule = generateRotationSchedule({
+      ...dates,
+      frequency: 'DAILY',
+      contributionAmountMinor: 1n,
+      slots: Array.from({ length: 101 }, (_, index) => ({
+        id: `slot-${index + 1}`,
+        position: index + 1,
+      })),
+    });
+    expect(schedule).toHaveLength(101);
+  });
+
   it('rejects durations over 12 months', () => {
     expect(() =>
       assertAjoGroupBounds(dates.startDate, new Date('2027-01-02T00:00:00Z'), 10),
     ).toThrow(UnprocessableEntityException);
+  });
+
+  it('keeps contribution, grace, eligibility, and payout timestamps distinct', () => {
+    const [cycle] = generateRotationSchedule({
+      ...dates,
+      frequency: 'WEEKLY',
+      contributionAmountMinor: 1n,
+      slots: [
+        { id: 'one', position: 1 },
+        { id: 'two', position: 2 },
+      ],
+      contributionOpenOffsetMinutes: 60,
+      contributionCloseOffsetMinutes: 30,
+      gracePeriodMinutes: 120,
+      payoutEligibilityCutoffMinutes: 180,
+      payoutOffsetMinutes: 240,
+      payoutProcessingWindowMinutes: 60,
+    });
+    expect(cycle?.contributionOpensAt.toISOString()).toBe('2025-12-31T23:00:00.000Z');
+    expect(cycle?.contributionClosesAt.toISOString()).toBe('2026-01-01T00:30:00.000Z');
+    expect(cycle?.graceEndsAt.toISOString()).toBe('2026-01-01T02:30:00.000Z');
+    expect(cycle?.payoutEligibilityCutoffAt.toISOString()).toBe('2026-01-01T03:00:00.000Z');
+    expect(cycle?.payoutDueAt.toISOString()).toBe('2026-01-01T04:00:00.000Z');
+    expect(cycle?.payoutProcessingEndsAt.toISOString()).toBe('2026-01-01T05:00:00.000Z');
   });
 });
