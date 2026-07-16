@@ -4,6 +4,9 @@
 
 ### Added
 
+- Approved-coordinator Food Ajo draft programme creation and guarded programme list/detail APIs.
+- Owner-scoped flexible and target Akawo goal creation, progress, detail, and paginated statement APIs.
+
 - Two-stage phone/email account verification with HMAC-only OTP challenges, resend/attempt limits, versioned registration consent, delivery/audit records, deterministic development personas, and additive migration.
 
 - Fastify NestJS modular-monolith foundation with strict configuration, logging, security, health, API documentation, workers, and scheduler.

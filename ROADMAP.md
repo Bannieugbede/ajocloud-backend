@@ -9,14 +9,14 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 2 Financial core               |      11 |        5 |           0 |       0 |      45.5% |
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        0 |           0 |       0 |         0% |
-| 5 Food Ajo                     |      13 |        3 |           0 |       0 |      23.1% |
-| 6 Akawo                        |       7 |        1 |           0 |       0 |      14.3% |
+| 5 Food Ajo                     |      13 |        4 |           0 |       0 |      30.8% |
+| 6 Akawo                        |       7 |        3 |           0 |       0 |      42.9% |
 | 7 Bill Payment                 |      11 |        6 |           0 |       2 |      54.5% |
 | 8 Progressive KYC              |       8 |        2 |           0 |       1 |        25% |
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        4 |           0 |       0 |        50% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **122** |   **58** |       **0** |   **4** |  **47.5%** |
+| **Total**                      | **122** |   **61** |       **0** |   **4** |    **50%** |
 
 ## Phase 0 — Foundation
 
@@ -99,7 +99,7 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Manual compliance review and information request
 - [x] **COMPLETE** Tier-3-gated coordinator approval with verification references
 - [ ] **NOT STARTED** Coordinator suspension/revocation API
-- [ ] **NOT STARTED** Approved-coordinator programme creation
+- [x] **COMPLETE** Approved-coordinator programme creation and authenticated programme reads
 - [ ] **NOT STARTED** Package activation/price locking/capacity service
 - [ ] **NOT STARTED** Subscriptions and contributions
 - [ ] **NOT STARTED** Vendor approval and tracking
@@ -111,8 +111,8 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 ## Phase 6 — Akawo
 
 - [x] **COMPLETE** Canonical Akawo schema for flexible/target/locked goals, maturity, schedules, and withdrawals
-- [ ] **NOT STARTED** Flexible savings service
-- [ ] **NOT STARTED** Target/goal savings service and progress/statements
+- [x] **COMPLETE** Flexible savings goal creation and owner-scoped reads
+- [x] **COMPLETE** Target/goal creation, progress, and paginated statements
 - [ ] **NOT STARTED** Locked savings and early-withdrawal rules
 - [ ] **NOT STARTED** Auto-save schedules and manual deposits
 - [ ] **NOT STARTED** Ledger-backed withdrawal workflow

@@ -10,6 +10,11 @@ import {
   ContributionFrequency,
   AccountType,
   FinancialAccountPurpose,
+  FoodCoordinatorApplicationStatus,
+  KycStatus,
+  KycTier,
+  SavingsGoalStatus,
+  SavingsGoalType,
   UserStatus,
 } from '../../generated/prisma/enums.js';
 import { verificationCodeHash } from '../../src/modules/auth/domain/verification-policy.js';
@@ -168,9 +173,52 @@ export async function runSeed(): Promise<void> {
       if (!assignment) await prisma.userRole.create({ data: { userId: admin.id, roleId } });
     }
 
+    const adminKyc = await prisma.kycProfile.upsert({
+      where: { userId: admin.id },
+      update: { status: KycStatus.VERIFIED, tier: KycTier.TIER_3, level: 3 },
+      create: {
+        userId: admin.id,
+        status: KycStatus.VERIFIED,
+        tier: KycTier.TIER_3,
+        level: 3,
+        verifiedAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    });
+    await prisma.foodCoordinatorProfile.upsert({
+      where: { kycProfileId: adminKyc.id },
+      update: { status: KycStatus.VERIFIED },
+      create: {
+        kycProfileId: adminKyc.id,
+        status: KycStatus.VERIFIED,
+        approvedAt: new Date('2026-01-02T00:00:00Z'),
+      },
+    });
+    await prisma.foodCoordinatorApplication.upsert({
+      where: { id: '50000000-0000-4000-8000-000000000001' },
+      update: { status: FoodCoordinatorApplicationStatus.APPROVED },
+      create: {
+        id: '50000000-0000-4000-8000-000000000001',
+        userId: admin.id,
+        status: FoodCoordinatorApplicationStatus.APPROVED,
+        personalDetails: { businessContactName: 'Ada Testadmin' },
+        businessDetails: { tradingName: 'Ada Community Foods' },
+        operatingLocation: { state: 'Lagos', city: 'Ikeja' },
+        fulfilmentLocations: [{ state: 'Lagos', city: 'Ikeja' }],
+        settlementBankCode: '999999',
+        settlementAccountMasked: '******1234',
+        settlementVerificationRef: 'development-settlement-verification',
+        identityVerificationRef: 'development-identity-verification',
+        riskAssessmentRef: 'development-risk-assessment',
+        verificationConsentAt: new Date('2026-01-01T00:00:00Z'),
+        termsAcceptedAt: new Date('2026-01-01T00:00:00Z'),
+        approvedAt: new Date('2026-01-02T00:00:00Z'),
+        expiresAt: new Date('2099-01-01T00:00:00Z'),
+      },
+    });
+
     await prisma.feeDefinition.upsert({
       where: { code_version: { code: 'PLATFORM_CONTRIBUTION_FIXED', version: 1 } },
-      update: {},
+      update: { name: 'Family Staples Monthly Plan' },
       create: {
         code: 'PLATFORM_CONTRIBUTION_FIXED',
         version: 1,
@@ -301,7 +349,7 @@ export async function runSeed(): Promise<void> {
       create: {
         id: '20000000-0000-4000-8000-000000000001',
         coordinatorUserId: admin.id,
-        name: 'Fake Family Rice Plan',
+        name: 'Family Staples Monthly Plan',
         contributionMinor: 10_000_00n,
         startsAt: new Date('2026-08-01'),
         endsAt: new Date('2026-12-01'),
@@ -309,22 +357,38 @@ export async function runSeed(): Promise<void> {
     });
     await prisma.foodPackage.upsert({
       where: { id: '20000000-0000-4000-8000-000000000002' },
-      update: {},
+      update: { name: 'Rice and Beans Essentials' },
       create: {
         id: '20000000-0000-4000-8000-000000000002',
         groupId: foodGroup.id,
-        name: 'Test Staple Package',
+        name: 'Rice and Beans Essentials',
         priceMinor: 50_000_00n,
       },
     });
+    for (const item of [
+      { name: 'Rice', quantity: '10.000', unit: 'kg' },
+      { name: 'Beans', quantity: '5.000', unit: 'kg' },
+    ]) {
+      const existingItem = await prisma.foodPackageItem.findFirst({
+        where: { packageId: '20000000-0000-4000-8000-000000000002', name: item.name },
+      });
+      if (!existingItem) {
+        await prisma.foodPackageItem.create({
+          data: { packageId: '20000000-0000-4000-8000-000000000002', ...item },
+        });
+      }
+    }
     await prisma.savingsGoal.upsert({
       where: { id: '30000000-0000-4000-8000-000000000001' },
-      update: {},
+      update: { name: 'Annual Rent', status: SavingsGoalStatus.ACTIVE },
       create: {
         id: '30000000-0000-4000-8000-000000000001',
         userId: admin.id,
-        name: 'Fake Rent Goal',
+        name: 'Annual Rent',
+        type: SavingsGoalType.TARGET,
         targetMinor: 600_000_00n,
+        status: SavingsGoalStatus.ACTIVE,
+        targetDate: new Date('2027-06-30'),
       },
     });
   } finally {

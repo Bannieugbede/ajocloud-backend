@@ -1,5 +1,17 @@
 # Implementation log
 
+## 2026-07-16 — Food programme and Akawo read/create APIs
+
+- Roadmap: completed approved-coordinator Food Ajo programme creation, flexible Akawo goal service,
+  and target Akawo progress/statements; total roadmap completion is 61/122 (50%).
+- Food Ajo: authenticated list/detail plus serializable draft creation with nested packages/items,
+  active coordinator-approval enforcement, validation, audit, and outbox event.
+- Akawo: owner-scoped flexible/target creation/list/detail, successful-contribution aggregation,
+  basis-point progress, and cursor-paginated statements. Locked goals and all money movement fail
+  closed or remain absent.
+- Seeds/tests: realistic approved coordinator, Food plan/package/items, and active target goal;
+  service tests cover coordinator denial/atomic writes and Akawo policy/progress.
+
 ## 2026-07-16 — Mobile account verification support
 
 - Work: Extended registration with Nigerian phone and versioned Terms/Privacy consent; added phone then email OTP verification, resend, account activation, token expiry metadata, and delivery/audit persistence.

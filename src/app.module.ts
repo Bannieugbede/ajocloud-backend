@@ -22,6 +22,8 @@ import { PublicConfigurationModule } from './modules/configuration/public-config
 import { FoodCoordinatorApplicationsModule } from './modules/food-coordinator-applications/food-coordinator-applications.module.js';
 import { BillPaymentsModule } from './modules/bill-payments/bill-payments.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
+import { AkawoModule } from './modules/akawo/akawo.module.js';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     FoodCoordinatorApplicationsModule,
     BillPaymentsModule,
     NotificationsModule,
+    FoodAjoModule,
+    AkawoModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

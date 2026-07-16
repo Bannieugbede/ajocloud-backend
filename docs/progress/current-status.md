@@ -12,6 +12,8 @@ flexible whole-unit Ajo creation/locking/calendars/versioned swaps; versioned fe
 Coordinator application/review/approval/suspension; provider-neutral Bill Payment catalog/validation/
 reservation/payment/manual reconciliation/provider reversal/receipt; KYC tier/provider boundaries;
 configurable referral and notification policies; Akawo schema expansion; and public brand configuration.
+Approved-coordinator Food Ajo programme creation/reads; Akawo flexible/target goal creation,
+owner-scoped progress, and paginated contribution statements.
 
 ## In progress
 
@@ -27,7 +29,8 @@ The real Monnify Bill Payment adapter/webhook and real Monnify/Dojah KYC adapter
 2. Implement scheduled provider inquiry plus durable outbox relay/inbox consumers and notification workers.
 3. Obtain and review current Monnify/Dojah specifications and commercial terms before implementing real adapters or webhooks.
 4. Approve Ajo default/multiple-recipient rules and the referral qualification ambiguity.
-5. Implement Food Ajo programme/procurement/distribution and Akawo ledger workflows without exposing schema-only endpoints.
+5. Implement Food Ajo activation/price locking and subscriptions, plus Akawo ledger-backed deposits,
+   schedules, and withdrawals.
 
 ## Unresolved decisions and risks
 
@@ -40,7 +43,7 @@ portions of Food Ajo, Akawo, KYC, referrals, and notifications.
 ## Verification and migrations
 
 Current `bun run check` passed: Prisma validation/generation, formatting, lint, strict typecheck,
-53 unit tests across 17 suites, and build. E2E passed 1 test. The first two migrations were previously
+57 unit tests across 19 suites, and build. E2E passed 1 test. The first two migrations were previously
 applied cleanly to isolated PostgreSQL 18 databases. The new account-verification schema validates
 and generates, but migration application, seed execution, migration status, and database integration
 could not run because no `DATABASE_URL`/PostgreSQL service was available; an isolated `/tmp` cluster
