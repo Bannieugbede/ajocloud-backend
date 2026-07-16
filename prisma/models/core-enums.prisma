@@ -1,0 +1,223 @@
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum CredentialType {
+  PASSWORD
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+  COMPROMISED
+}
+
+enum OrganisationStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum OrganisationMemberStatus {
+  ACTIVE
+  SUSPENDED
+  LEFT
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+  REQUIRES_REVIEW
+  EXPIRED
+}
+
+enum KycCheckStatus {
+  PENDING
+  PROCESSING
+  PASSED
+  FAILED
+  ERROR
+}
+
+enum ComplianceReviewStatus {
+  OPEN
+  APPROVED
+  REJECTED
+  ESCALATED
+  CLOSED
+}
+
+enum WalletStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum LedgerTransactionStatus {
+  PENDING
+  POSTED
+  REVERSED
+}
+
+enum LedgerEntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  REVIEWING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+  CANCELLED
+}
+
+enum TransferStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum FeeCalculationType {
+  FIXED
+  PERCENTAGE
+}
+
+enum FeeAssessmentStatus {
+  PENDING
+  PAID
+  WAIVED
+  REVERSED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+  CLOSED
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum EventProcessingStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum FoodAjoStatus {
+  DRAFT
+  OPEN
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+}
+
+enum FoodSubscriptionStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DEFAULTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  CONFIRMED
+  FULFILLED
+  CANCELLED
+}
+
+enum FoodDistributionStatus {
+  PLANNED
+  READY
+  DISTRIBUTING
+  COMPLETED
+  CANCELLED
+}
+
+enum SavingsGoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum SavingsScheduleStatus {
+  PENDING
+  DUE
+  PAID
+  MISSED
+  CANCELLED
+}
+
+enum SavingsWithdrawalRuleType {
+  FLEXIBLE
+  LOCKED_UNTIL_DATE
+  TARGET_REACHED
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REWARDED
+  REJECTED
+}

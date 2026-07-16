@@ -1,0 +1,154 @@
+model Referral {
+  id             String         @id @default(uuid()) @db.Uuid
+  referrerUserId String         @db.Uuid
+  referredUserId String         @unique @db.Uuid
+  code           String         @db.VarChar(64)
+  status         ReferralStatus @default(PENDING)
+  qualifiedAt    DateTime?      @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+
+  rewards ReferralReward[]
+
+  @@index([referrerUserId, status])
+  @@map("referrals")
+}
+
+model ReferralReward {
+  id                  String    @id @default(uuid()) @db.Uuid
+  referralId          String    @db.Uuid
+  amountMinor         BigInt
+  currency            String    @db.Char(3)
+  ledgerTransactionId String?   @unique @db.Uuid
+  awardedAt           DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+
+  referral Referral @relation(fields: [referralId], references: [id], onDelete: Restrict)
+
+  @@map("referral_rewards")
+}
+
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  channel   NotificationChannel
+  template  String              @db.VarChar(100)
+  status    NotificationStatus  @default(PENDING)
+  payload   Json
+  dedupeKey String?             @unique @db.VarChar(191)
+  sentAt    DateTime?           @db.Timestamptz(6)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, status, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  channel   NotificationChannel
+  topic     String              @db.VarChar(80)
+  enabled   Boolean             @default(true)
+  updatedAt DateTime            @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, channel, topic])
+  @@map("notification_preferences")
+}
+
+model Dispute {
+  id          String        @id @default(uuid()) @db.Uuid
+  openedById  String        @db.Uuid
+  subjectType String        @db.VarChar(64)
+  subjectId   String        @db.Uuid
+  status      DisputeStatus @default(OPEN)
+  summary     String        @db.VarChar(1000)
+  resolvedAt  DateTime?     @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+
+  messages DisputeMessage[]
+
+  @@index([status, createdAt])
+  @@index([subjectType, subjectId])
+  @@map("disputes")
+}
+
+model DisputeMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  disputeId String   @db.Uuid
+  authorId  String   @db.Uuid
+  message   String   @db.VarChar(2000)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Restrict)
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_messages")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String?  @db.Uuid
+  action         String   @db.VarChar(120)
+  subjectType    String   @db.VarChar(80)
+  subjectId      String?  @db.Uuid
+  organisationId String?  @db.Uuid
+  groupId        String?  @db.Uuid
+  requestId      String?  @db.VarChar(128)
+  ipAddress      String?  @db.Inet
+  metadata       Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([actorUserId, createdAt])
+  @@index([subjectType, subjectId, createdAt])
+  @@index([groupId, createdAt])
+  @@map("audit_logs")
+}
+
+model RiskEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String?      @db.Uuid
+  type        String       @db.VarChar(100)
+  severity    RiskSeverity
+  fingerprint String?      @db.VarChar(191)
+  metadata    Json?
+  resolvedAt  DateTime?    @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([severity, resolvedAt, createdAt])
+  @@map("risk_events")
+}
+
+model OutboxEvent {
+  id            String                @id @default(uuid()) @db.Uuid
+  aggregateType String                @db.VarChar(80)
+  aggregateId   String                @db.Uuid
+  eventType     String                @db.VarChar(120)
+  eventVersion  Int                   @default(1)
+  payload       Json
+  correlationId String?               @db.VarChar(128)
+  status        EventProcessingStatus @default(PENDING)
+  availableAt   DateTime              @default(now()) @db.Timestamptz(6)
+  processedAt   DateTime?             @db.Timestamptz(6)
+  attempts      Int                   @default(0)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(6)
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+model InboxEvent {
+  id            String                @id @default(uuid()) @db.Uuid
+  source        String                @db.VarChar(80)
+  eventId       String                @db.VarChar(191)
+  eventType     String                @db.VarChar(120)
+  eventVersion  Int                   @default(1)
+  payloadHash   String                @db.VarChar(128)
+  correlationId String?               @db.VarChar(128)
+  status        EventProcessingStatus @default(PENDING)
+  processedAt   DateTime?             @db.Timestamptz(6)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(6)
+
+  @@unique([source, eventId])
+  @@index([status, createdAt])
+  @@map("inbox_events")
+}

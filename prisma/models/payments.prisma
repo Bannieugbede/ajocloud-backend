@@ -1,0 +1,136 @@
+model Payment {
+  id                  String        @id @default(uuid()) @db.Uuid
+  userId              String        @db.Uuid
+  walletId            String?       @db.Uuid
+  internalReference   String        @unique @db.VarChar(80)
+  provider            String        @db.VarChar(64)
+  providerReference   String?       @unique @db.VarChar(191)
+  amountMinor         BigInt
+  currency            String        @db.Char(3)
+  status              PaymentStatus @default(PENDING)
+  idempotencyKey      String        @unique @db.VarChar(128)
+  ledgerTransactionId String?       @unique @db.Uuid
+  createdAt           DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @db.Timestamptz(6)
+
+  attempts PaymentAttempt[]
+
+  @@index([userId, status, createdAt])
+  @@map("payments")
+}
+
+model PaymentAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  paymentId         String        @db.Uuid
+  attemptNumber     Int
+  providerReference String?       @db.VarChar(191)
+  status            PaymentStatus @default(PENDING)
+  failureCode       String?       @db.VarChar(64)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, attemptNumber])
+  @@index([providerReference])
+  @@map("payment_attempts")
+}
+
+model PaymentWebhookEvent {
+  id              String                @id @default(uuid()) @db.Uuid
+  provider        String                @db.VarChar(64)
+  providerEventId String                @db.VarChar(191)
+  payloadHash     String                @db.VarChar(128)
+  signatureHash   String?               @db.VarChar(128)
+  status          EventProcessingStatus @default(PENDING)
+  failureReason   String?               @db.VarChar(500)
+  receivedAt      DateTime              @default(now()) @db.Timestamptz(6)
+  processedAt     DateTime?             @db.Timestamptz(6)
+
+  @@unique([provider, providerEventId])
+  @@index([status, receivedAt])
+  @@map("payment_webhook_events")
+}
+
+model Withdrawal {
+  id                  String           @id @default(uuid()) @db.Uuid
+  userId              String           @db.Uuid
+  walletId            String           @db.Uuid
+  internalReference   String           @unique @db.VarChar(80)
+  amountMinor         BigInt
+  currency            String           @db.Char(3)
+  status              WithdrawalStatus @default(PENDING)
+  idempotencyKey      String           @unique @db.VarChar(128)
+  providerReference   String?          @unique @db.VarChar(191)
+  ledgerTransactionId String?          @unique @db.Uuid
+  createdAt           DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(6)
+
+  @@index([userId, status, createdAt])
+  @@map("withdrawals")
+}
+
+model Transfer {
+  id                  String         @id @default(uuid()) @db.Uuid
+  sourceWalletId      String         @db.Uuid
+  destinationWalletId String         @db.Uuid
+  internalReference   String         @unique @db.VarChar(80)
+  amountMinor         BigInt
+  currency            String         @db.Char(3)
+  status              TransferStatus @default(PENDING)
+  idempotencyKey      String         @unique @db.VarChar(128)
+  ledgerTransactionId String?        @unique @db.Uuid
+  createdAt           DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
+
+  @@index([sourceWalletId, createdAt])
+  @@index([destinationWalletId, createdAt])
+  @@map("transfers")
+}
+
+model IdempotencyRecord {
+  id           String            @id @default(uuid()) @db.Uuid
+  key          String            @db.VarChar(128)
+  scope        String            @db.VarChar(100)
+  requestHash  String            @db.VarChar(128)
+  status       IdempotencyStatus @default(PROCESSING)
+  responseCode Int?
+  responseBody Json?
+  lockedUntil  DateTime?         @db.Timestamptz(6)
+  expiresAt    DateTime          @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @db.Timestamptz(6)
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model ReconciliationRecord {
+  id                String    @id @default(uuid()) @db.Uuid
+  provider          String    @db.VarChar(64)
+  externalReference String    @db.VarChar(191)
+  internalReference String?   @db.VarChar(191)
+  amountMinor       BigInt
+  currency          String    @db.Char(3)
+  matched           Boolean   @default(false)
+  reconciledAt      DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([provider, externalReference])
+  @@index([matched, createdAt])
+  @@map("reconciliation_records")
+}
+
+model SettlementRecord {
+  id                String   @id @default(uuid()) @db.Uuid
+  provider          String   @db.VarChar(64)
+  providerReference String   @db.VarChar(191)
+  amountMinor       BigInt
+  feeMinor          BigInt   @default(0)
+  currency          String   @db.Char(3)
+  settledAt         DateTime @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([provider, providerReference])
+  @@map("settlement_records")
+}

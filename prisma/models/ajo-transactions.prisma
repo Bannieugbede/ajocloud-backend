@@ -1,0 +1,114 @@
+model Contribution {
+  id                  String             @id @default(uuid()) @db.Uuid
+  groupId             String             @db.Uuid
+  scheduleId          String             @db.Uuid
+  memberId            String             @db.Uuid
+  slotId              String             @db.Uuid
+  amountMinor         BigInt
+  currency            String             @db.Char(3)
+  status              ContributionStatus @default(PENDING)
+  idempotencyKey      String             @unique @db.VarChar(128)
+  externalReference   String?            @db.VarChar(191)
+  ledgerTransactionId String?            @db.Uuid
+  failureCode         String?            @db.VarChar(64)
+  failureReason       String?            @db.VarChar(500)
+  processedAt         DateTime?          @db.Timestamptz(6)
+  createdAt           DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
+
+  group    AjoGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  schedule ContributionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  member   AjoGroupMember       @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  slot     AjoSlot              @relation(fields: [slotId], references: [id], onDelete: Restrict)
+
+  @@index([scheduleId, status])
+  @@index([memberId, createdAt])
+  @@index([groupId, status, createdAt])
+  @@index([externalReference])
+  @@index([ledgerTransactionId])
+  @@map("contributions")
+}
+
+model Payout {
+  id                  String       @id @default(uuid()) @db.Uuid
+  groupId             String       @db.Uuid
+  scheduleId          String       @db.Uuid
+  memberId            String       @db.Uuid
+  slotId              String       @db.Uuid
+  amountMinor         BigInt
+  currency            String       @db.Char(3)
+  status              PayoutStatus @default(PENDING)
+  idempotencyKey      String       @unique @db.VarChar(128)
+  externalReference   String?      @db.VarChar(191)
+  ledgerTransactionId String?      @db.Uuid
+  failureCode         String?      @db.VarChar(64)
+  failureReason       String?      @db.VarChar(500)
+  processedAt         DateTime?    @db.Timestamptz(6)
+  createdAt           DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime     @updatedAt @db.Timestamptz(6)
+
+  group    AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  schedule PayoutSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  member   AjoGroupMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  slot     AjoSlot        @relation(fields: [slotId], references: [id], onDelete: Restrict)
+
+  @@index([scheduleId, status])
+  @@index([memberId, createdAt])
+  @@index([groupId, status, createdAt])
+  @@index([externalReference])
+  @@index([ledgerTransactionId])
+  @@map("payouts")
+}
+
+model PenaltyRule {
+  id              String                 @id @default(uuid()) @db.Uuid
+  groupId         String                 @db.Uuid
+  name            String                 @db.VarChar(120)
+  description     String?                @db.VarChar(500)
+  calculationType PenaltyCalculationType
+  amountMinor     BigInt?
+  basisPoints     Int?
+  currency        String?                @db.Char(3)
+  gracePeriodDays Int                    @default(0)
+  isActive        Boolean                @default(true)
+  createdByUserId String                 @db.Uuid
+  createdAt       DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime               @updatedAt @db.Timestamptz(6)
+
+  group   AjoGroup        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  records PenaltyRecord[]
+
+  @@unique([groupId, name])
+  @@index([groupId, isActive])
+  @@map("penalty_rules")
+}
+
+model PenaltyRecord {
+  id                     String              @id @default(uuid()) @db.Uuid
+  groupId                String              @db.Uuid
+  ruleId                 String              @db.Uuid
+  memberId               String              @db.Uuid
+  contributionScheduleId String?             @db.Uuid
+  assessedByMemberId     String?             @db.Uuid
+  amountMinor            BigInt
+  currency               String              @db.Char(3)
+  status                 PenaltyRecordStatus @default(PENDING)
+  reason                 String              @db.VarChar(500)
+  assessedAt             DateTime?           @db.Timestamptz(6)
+  paidAt                 DateTime?           @db.Timestamptz(6)
+  waivedAt               DateTime?           @db.Timestamptz(6)
+  waivedByUserId         String?             @db.Uuid
+  createdAt              DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime            @updatedAt @db.Timestamptz(6)
+
+  group                AjoGroup              @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  rule                 PenaltyRule           @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  member               AjoGroupMember        @relation("PenaltyMember", fields: [memberId], references: [id], onDelete: Restrict)
+  assessedByMember     AjoGroupMember?       @relation("PenaltyAssessor", fields: [assessedByMemberId], references: [id], onDelete: Restrict)
+  contributionSchedule ContributionSchedule? @relation(fields: [contributionScheduleId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, status, createdAt])
+  @@index([memberId, status])
+  @@index([contributionScheduleId])
+  @@map("penalty_records")
+}

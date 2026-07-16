@@ -1,0 +1,89 @@
+model KycProfile {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  status      KycStatus @default(NOT_STARTED)
+  level       Int       @default(0)
+  providerRef String?   @unique @db.VarChar(191)
+  submittedAt DateTime? @db.Timestamptz(6)
+  verifiedAt  DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  checks      KycCheck[]
+  documents   VerificationDocument[]
+  coordinator FoodCoordinatorProfile?
+  reviews     ComplianceReview[]
+
+  @@map("kyc_profiles")
+}
+
+model KycCheck {
+  id           String         @id @default(uuid()) @db.Uuid
+  kycProfileId String         @db.Uuid
+  type         String         @db.VarChar(64)
+  status       KycCheckStatus @default(PENDING)
+  providerRef  String?        @unique @db.VarChar(191)
+  resultCode   String?        @db.VarChar(64)
+  checkedAt    DateTime?      @db.Timestamptz(6)
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+
+  profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
+
+  @@index([kycProfileId, status])
+  @@map("kyc_checks")
+}
+
+model VerificationDocument {
+  id           String    @id @default(uuid()) @db.Uuid
+  kycProfileId String    @db.Uuid
+  type         String    @db.VarChar(64)
+  storageKey   String    @unique @db.VarChar(500)
+  contentHash  String    @db.VarChar(128)
+  expiresAt    DateTime? @db.Date
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
+
+  @@map("verification_documents")
+}
+
+model VerificationProviderEvent {
+  id              String                @id @default(uuid()) @db.Uuid
+  provider        String                @db.VarChar(64)
+  providerEventId String                @db.VarChar(191)
+  payloadHash     String                @db.VarChar(128)
+  status          EventProcessingStatus @default(PENDING)
+  receivedAt      DateTime              @default(now()) @db.Timestamptz(6)
+  processedAt     DateTime?             @db.Timestamptz(6)
+
+  @@unique([provider, providerEventId])
+  @@map("verification_provider_events")
+}
+
+model FoodCoordinatorProfile {
+  id           String    @id @default(uuid()) @db.Uuid
+  kycProfileId String    @unique @db.Uuid
+  status       KycStatus @default(PENDING)
+  approvedAt   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
+
+  @@map("food_coordinator_profiles")
+}
+
+model ComplianceReview {
+  id           String                 @id @default(uuid()) @db.Uuid
+  kycProfileId String                 @db.Uuid
+  reviewerId   String?                @db.Uuid
+  status       ComplianceReviewStatus @default(OPEN)
+  reason       String?                @db.VarChar(1000)
+  decidedAt    DateTime?              @db.Timestamptz(6)
+  createdAt    DateTime               @default(now()) @db.Timestamptz(6)
+
+  profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@map("compliance_reviews")
+}

@@ -1,0 +1,112 @@
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String?    @unique @db.VarChar(320)
+  phone           String?    @unique @db.VarChar(32)
+  status          UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt DateTime?  @db.Timestamptz(6)
+  phoneVerifiedAt DateTime?  @db.Timestamptz(6)
+  lastLoginAt     DateTime?  @db.Timestamptz(6)
+  suspendedAt     DateTime?  @db.Timestamptz(6)
+  deactivatedAt   DateTime?  @db.Timestamptz(6)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
+
+  profile             UserProfile?
+  credential          UserCredential?
+  sessions            Session[]
+  devices             Device[]
+  roleAssignments     UserRole[]
+  organisationMembers OrganisationMember[]
+  kycProfile          KycProfile?
+  wallets             Wallet[]
+
+  @@index([status, createdAt])
+  @@map("users")
+}
+
+model UserProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  firstName String   @db.VarChar(100)
+  lastName  String   @db.VarChar(100)
+  avatarUrl String?  @db.VarChar(2048)
+  timezone  String   @default("Africa/Lagos") @db.VarChar(64)
+  locale    String   @default("en-NG") @db.VarChar(16)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserCredential {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @unique @db.Uuid
+  type         CredentialType @default(PASSWORD)
+  passwordHash String         @db.VarChar(255)
+  changedAt    DateTime       @default(now()) @db.Timestamptz(6)
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_credentials")
+}
+
+model Device {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  fingerprint String    @db.VarChar(191)
+  name        String?   @db.VarChar(120)
+  platform    String?   @db.VarChar(64)
+  trustedAt   DateTime? @db.Timestamptz(6)
+  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  @@unique([userId, fingerprint])
+  @@map("devices")
+}
+
+model Session {
+  id               String        @id @default(uuid()) @db.Uuid
+  userId           String        @db.Uuid
+  deviceId         String?       @db.Uuid
+  status           SessionStatus @default(ACTIVE)
+  currentTokenHash String        @db.VarChar(128)
+  ipAddress        String?       @db.Inet
+  userAgent        String?       @db.VarChar(500)
+  expiresAt        DateTime      @db.Timestamptz(6)
+  lastRotatedAt    DateTime      @default(now()) @db.Timestamptz(6)
+  revokedAt        DateTime?     @db.Timestamptz(6)
+  revokeReason     String?       @db.VarChar(120)
+  createdAt        DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(6)
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device        Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  sessionId    String    @db.Uuid
+  tokenHash    String    @unique @db.VarChar(128)
+  expiresAt    DateTime  @db.Timestamptz(6)
+  consumedAt   DateTime? @db.Timestamptz(6)
+  revokedAt    DateTime? @db.Timestamptz(6)
+  replacedById String?   @db.Uuid
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, expiresAt])
+  @@map("refresh_tokens")
+}

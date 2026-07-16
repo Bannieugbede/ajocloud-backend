@@ -1,0 +1,98 @@
+model AjoGroup {
+  id                    String                @id @default(uuid()) @db.Uuid
+  organisationId        String?               @db.Uuid
+  name                  String                @db.VarChar(160)
+  description           String?               @db.VarChar(1000)
+  status                AjoGroupStatus        @default(DRAFT)
+  contributionFrequency ContributionFrequency
+  baseContributionMinor BigInt
+  currency              String                @default("NGN") @db.Char(3)
+  maxSlots              Int
+  startDate             DateTime              @db.Date
+  endDate               DateTime              @db.Date
+  createdByUserId       String                @db.Uuid
+  scheduleVersion       Int                   @default(0)
+  lockedAt              DateTime?             @db.Timestamptz(6)
+  activatedAt           DateTime?             @db.Timestamptz(6)
+  completedAt           DateTime?             @db.Timestamptz(6)
+  suspendedAt           DateTime?             @db.Timestamptz(6)
+  cancelledAt           DateTime?             @db.Timestamptz(6)
+  createdAt             DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt             DateTime?             @db.Timestamptz(6)
+
+  members               AjoGroupMember[]
+  slots                 AjoSlot[]
+  cycles                AjoCycle[]
+  contributionSchedules ContributionSchedule[]
+  payoutSchedules       PayoutSchedule[]
+  contributions         Contribution[]
+  payouts               Payout[]
+  swapRequests          SwapRequest[]
+  penaltyRules          PenaltyRule[]
+  penaltyRecords        PenaltyRecord[]
+  invitations           GroupInvitation[]
+  referralCodes         GroupReferralCode[]
+
+  @@index([organisationId, status])
+  @@index([createdByUserId])
+  @@index([status, startDate])
+  @@map("ajo_groups")
+}
+
+model AjoGroupMember {
+  id          String          @id @default(uuid()) @db.Uuid
+  groupId     String          @db.Uuid
+  userId      String          @db.Uuid
+  role        AjoMemberRole   @default(MEMBER)
+  status      AjoMemberStatus @default(INVITED)
+  joinedAt    DateTime?       @db.Timestamptz(6)
+  suspendedAt DateTime?       @db.Timestamptz(6)
+  leftAt      DateTime?       @db.Timestamptz(6)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(6)
+
+  group               AjoGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  slots               AjoSlot[]
+  contributions       Contribution[]
+  payouts             Payout[]
+  requestedSwaps      SwapRequest[]       @relation("SwapRequester")
+  swapApprovals       SwapApproval[]
+  assessedPenalties   PenaltyRecord[]     @relation("PenaltyMember")
+  assessedByPenalties PenaltyRecord[]     @relation("PenaltyAssessor")
+  createdInvitations  GroupInvitation[]
+  ownedReferralCodes  GroupReferralCode[]
+
+  @@unique([groupId, userId])
+  @@index([userId, status])
+  @@index([groupId, role, status])
+  @@map("ajo_group_members")
+}
+
+model AjoSlot {
+  id          String        @id @default(uuid()) @db.Uuid
+  groupId     String        @db.Uuid
+  memberId    String        @db.Uuid
+  position    Int
+  status      AjoSlotStatus @default(RESERVED)
+  assignedAt  DateTime      @default(now()) @db.Timestamptz(6)
+  activatedAt DateTime?     @db.Timestamptz(6)
+  completedAt DateTime?     @db.Timestamptz(6)
+  cancelledAt DateTime?     @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+
+  group                 AjoGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  member                AjoGroupMember         @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  contributionSchedules ContributionSchedule[]
+  payoutSchedule        PayoutSchedule?
+  contributions         Contribution[]
+  payouts               Payout[]
+  outgoingSwapRequests  SwapRequest[]          @relation("SwapFromSlot")
+  incomingSwapRequests  SwapRequest[]          @relation("SwapToSlot")
+
+  @@unique([groupId, position])
+  @@index([memberId, status])
+  @@index([groupId, status])
+  @@map("ajo_slots")
+}

@@ -1,0 +1,71 @@
+model AjoCycle {
+  id                String         @id @default(uuid()) @db.Uuid
+  groupId           String         @db.Uuid
+  sequence          Int
+  status            AjoCycleStatus @default(PENDING)
+  contributionDueAt DateTime       @db.Timestamptz(6)
+  payoutDueAt       DateTime       @db.Timestamptz(6)
+  openedAt          DateTime?      @db.Timestamptz(6)
+  completedAt       DateTime?      @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(6)
+
+  group                 AjoGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  contributionSchedules ContributionSchedule[]
+  payoutSchedule        PayoutSchedule?
+
+  @@unique([groupId, sequence])
+  @@index([groupId, status, contributionDueAt])
+  @@map("ajo_cycles")
+}
+
+model ContributionSchedule {
+  id              String                     @id @default(uuid()) @db.Uuid
+  groupId         String                     @db.Uuid
+  cycleId         String                     @db.Uuid
+  slotId          String                     @db.Uuid
+  amountDueMinor  BigInt
+  amountPaidMinor BigInt                     @default(0)
+  currency        String                     @db.Char(3)
+  dueAt           DateTime                   @db.Timestamptz(6)
+  status          ContributionScheduleStatus @default(PENDING)
+  scheduleVersion Int
+  immutableAt     DateTime?                  @db.Timestamptz(6)
+  createdAt       DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime                   @updatedAt @db.Timestamptz(6)
+
+  group         AjoGroup        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  cycle         AjoCycle        @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  slot          AjoSlot         @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  contributions Contribution[]
+  penalties     PenaltyRecord[]
+
+  @@unique([cycleId, slotId])
+  @@index([groupId, status, dueAt])
+  @@index([slotId, status])
+  @@map("contribution_schedules")
+}
+
+model PayoutSchedule {
+  id              String               @id @default(uuid()) @db.Uuid
+  groupId         String               @db.Uuid
+  cycleId         String               @unique @db.Uuid
+  slotId          String               @unique @db.Uuid
+  amountDueMinor  BigInt
+  amountPaidMinor BigInt               @default(0)
+  currency        String               @db.Char(3)
+  dueAt           DateTime             @db.Timestamptz(6)
+  status          PayoutScheduleStatus @default(PENDING)
+  scheduleVersion Int
+  immutableAt     DateTime?            @db.Timestamptz(6)
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
+
+  group   AjoGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  cycle   AjoCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  slot    AjoSlot  @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  payouts Payout[]
+
+  @@index([groupId, status, dueAt])
+  @@map("payout_schedules")
+}

@@ -1,0 +1,58 @@
+model FinancialAccount {
+  id        String      @id @default(uuid()) @db.Uuid
+  code      String      @unique @db.VarChar(80)
+  name      String      @db.VarChar(160)
+  type      AccountType
+  currency  String      @db.Char(3)
+  walletId  String?     @db.Uuid
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(6)
+
+  wallet        Wallet?       @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  ledgerEntries LedgerEntry[]
+
+  @@index([type, currency, isActive])
+  @@map("financial_accounts")
+}
+
+model LedgerTransaction {
+  id                String                  @id @default(uuid()) @db.Uuid
+  reference         String                  @unique @db.VarChar(80)
+  idempotencyKey    String                  @unique @db.VarChar(128)
+  description       String                  @db.VarChar(500)
+  currency          String                  @db.Char(3)
+  status            LedgerTransactionStatus @default(PENDING)
+  reversalOfId      String?                 @unique @db.Uuid
+  initiatedByUserId String?                 @db.Uuid
+  correlationId     String?                 @db.VarChar(128)
+  postedAt          DateTime?               @db.Timestamptz(6)
+  reversedAt        DateTime?               @db.Timestamptz(6)
+  createdAt         DateTime                @default(now()) @db.Timestamptz(6)
+
+  reversalOf LedgerTransaction? @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal   LedgerTransaction? @relation("LedgerReversal")
+  entries    LedgerEntry[]
+
+  @@index([status, createdAt])
+  @@index([correlationId])
+  @@map("ledger_transactions")
+}
+
+model LedgerEntry {
+  id            String               @id @default(uuid()) @db.Uuid
+  transactionId String               @db.Uuid
+  accountId     String               @db.Uuid
+  direction     LedgerEntryDirection
+  amountMinor   BigInt
+  currency      String               @db.Char(3)
+  sequence      Int
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account     FinancialAccount  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, sequence])
+  @@index([accountId, createdAt])
+  @@map("ledger_entries")
+}

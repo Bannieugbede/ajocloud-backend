@@ -1,0 +1,33 @@
+model FeeDefinition {
+  id              String             @id @default(uuid()) @db.Uuid
+  code            String             @unique @db.VarChar(80)
+  name            String             @db.VarChar(160)
+  calculationType FeeCalculationType
+  amountMinor     BigInt?
+  basisPoints     Int?
+  currency        String?            @db.Char(3)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
+
+  assessments FeeAssessment[]
+
+  @@map("fee_definitions")
+}
+
+model FeeAssessment {
+  id                  String              @id @default(uuid()) @db.Uuid
+  feeDefinitionId     String              @db.Uuid
+  subjectType         String              @db.VarChar(64)
+  subjectId           String              @db.Uuid
+  amountMinor         BigInt
+  currency            String              @db.Char(3)
+  status              FeeAssessmentStatus @default(PENDING)
+  ledgerTransactionId String?             @db.Uuid
+  createdAt           DateTime            @default(now()) @db.Timestamptz(6)
+
+  definition FeeDefinition @relation(fields: [feeDefinitionId], references: [id], onDelete: Restrict)
+
+  @@index([subjectType, subjectId])
+  @@map("fee_assessments")
+}

@@ -1,0 +1,47 @@
+model Organisation {
+  id        String             @id @default(uuid()) @db.Uuid
+  name      String             @db.VarChar(160)
+  slug      String             @unique @db.VarChar(100)
+  status    OrganisationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime           @updatedAt @db.Timestamptz(6)
+
+  branches Branch[]
+  members  OrganisationMember[]
+
+  @@map("organisations")
+}
+
+model Branch {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  name           String   @db.VarChar(160)
+  code           String   @db.VarChar(40)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  organisation Organisation         @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  members      OrganisationMember[]
+
+  @@unique([organisationId, code])
+  @@map("branches")
+}
+
+model OrganisationMember {
+  id             String                   @id @default(uuid()) @db.Uuid
+  organisationId String                   @db.Uuid
+  branchId       String?                  @db.Uuid
+  userId         String                   @db.Uuid
+  status         OrganisationMemberStatus @default(ACTIVE)
+  joinedAt       DateTime                 @default(now()) @db.Timestamptz(6)
+  leftAt         DateTime?                @db.Timestamptz(6)
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  branch       Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([organisationId, userId])
+  @@index([userId, status])
+  @@map("organisation_members")
+}

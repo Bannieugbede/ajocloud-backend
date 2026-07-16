@@ -1,0 +1,84 @@
+model SwapRequest {
+  id                  String            @id @default(uuid()) @db.Uuid
+  groupId             String            @db.Uuid
+  requestedByMemberId String            @db.Uuid
+  fromSlotId          String            @db.Uuid
+  toSlotId            String            @db.Uuid
+  status              SwapRequestStatus @default(PENDING)
+  reason              String?           @db.VarChar(500)
+  scheduleVersion     Int
+  expiresAt           DateTime?         @db.Timestamptz(6)
+  decidedAt           DateTime?         @db.Timestamptz(6)
+  executedAt          DateTime?         @db.Timestamptz(6)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+
+  group       AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  requestedBy AjoGroupMember @relation("SwapRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
+  fromSlot    AjoSlot        @relation("SwapFromSlot", fields: [fromSlotId], references: [id], onDelete: Restrict)
+  toSlot      AjoSlot        @relation("SwapToSlot", fields: [toSlotId], references: [id], onDelete: Restrict)
+  approvals   SwapApproval[]
+
+  @@index([groupId, status, createdAt])
+  @@index([requestedByMemberId, status])
+  @@index([fromSlotId])
+  @@index([toSlotId])
+  @@map("swap_requests")
+}
+
+model SwapApproval {
+  id               String               @id @default(uuid()) @db.Uuid
+  swapRequestId    String               @db.Uuid
+  approverMemberId String               @db.Uuid
+  decision         SwapApprovalDecision
+  reason           String?              @db.VarChar(500)
+  decidedAt        DateTime             @default(now()) @db.Timestamptz(6)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(6)
+
+  swapRequest SwapRequest    @relation(fields: [swapRequestId], references: [id], onDelete: Restrict)
+  approver    AjoGroupMember @relation(fields: [approverMemberId], references: [id], onDelete: Restrict)
+
+  @@unique([swapRequestId, approverMemberId])
+  @@index([approverMemberId, decidedAt])
+  @@map("swap_approvals")
+}
+
+model GroupInvitation {
+  id                String                @id @default(uuid()) @db.Uuid
+  groupId           String                @db.Uuid
+  createdByMemberId String                @db.Uuid
+  tokenDigest       String                @unique @db.VarChar(128)
+  status            GroupInvitationStatus @default(ACTIVE)
+  maxUses           Int                   @default(1)
+  useCount          Int                   @default(0)
+  expiresAt         DateTime              @db.Timestamptz(6)
+  revokedAt         DateTime?             @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
+
+  group     AjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  createdBy AjoGroupMember @relation(fields: [createdByMemberId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, status, expiresAt])
+  @@map("group_invitations")
+}
+
+model GroupReferralCode {
+  id            String                  @id @default(uuid()) @db.Uuid
+  groupId       String                  @db.Uuid
+  ownerMemberId String?                 @db.Uuid
+  codeDigest    String                  @unique @db.VarChar(128)
+  status        GroupReferralCodeStatus @default(ACTIVE)
+  maxUses       Int?
+  useCount      Int                     @default(0)
+  expiresAt     DateTime?               @db.Timestamptz(6)
+  createdAt     DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                @updatedAt @db.Timestamptz(6)
+
+  group AjoGroup        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  owner AjoGroupMember? @relation(fields: [ownerMemberId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, status, expiresAt])
+  @@index([ownerMemberId])
+  @@map("group_referral_codes")
+}

@@ -1,0 +1,163 @@
+model FoodAjoGroup {
+  id                String        @id @default(uuid()) @db.Uuid
+  coordinatorUserId String        @db.Uuid
+  name              String        @db.VarChar(160)
+  status            FoodAjoStatus @default(DRAFT)
+  currency          String        @default("NGN") @db.Char(3)
+  contributionMinor BigInt
+  startsAt          DateTime      @db.Date
+  endsAt            DateTime      @db.Date
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(6)
+
+  packages      FoodPackage[]
+  subscriptions FoodSubscription[]
+  distributions FoodDistribution[]
+
+  @@index([coordinatorUserId, status])
+  @@map("food_ajo_groups")
+}
+
+model FoodPackage {
+  id         String   @id @default(uuid()) @db.Uuid
+  groupId    String   @db.Uuid
+  name       String   @db.VarChar(160)
+  priceMinor BigInt
+  currency   String   @default("NGN") @db.Char(3)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  group         FoodAjoGroup       @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  items         FoodPackageItem[]
+  subscriptions FoodSubscription[]
+
+  @@index([groupId, isActive])
+  @@map("food_packages")
+}
+
+model FoodPackageItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  packageId String  @db.Uuid
+  name      String  @db.VarChar(160)
+  quantity  Decimal @db.Decimal(12, 3)
+  unit      String  @db.VarChar(32)
+
+  package FoodPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@map("food_package_items")
+}
+
+model FoodSubscription {
+  id        String                 @id @default(uuid()) @db.Uuid
+  groupId   String                 @db.Uuid
+  packageId String                 @db.Uuid
+  userId    String                 @db.Uuid
+  status    FoodSubscriptionStatus @default(PENDING)
+  quantity  Int                    @default(1)
+  createdAt DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime               @updatedAt @db.Timestamptz(6)
+
+  group   FoodAjoGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  package FoodPackage  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, userId, packageId])
+  @@map("food_subscriptions")
+}
+
+model Vendor {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(160)
+  contactEmail String?  @db.VarChar(320)
+  contactPhone String?  @db.VarChar(32)
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model PurchaseOrder {
+  id                String              @id @default(uuid()) @db.Uuid
+  vendorId          String              @db.Uuid
+  internalReference String              @unique @db.VarChar(80)
+  status            PurchaseOrderStatus @default(DRAFT)
+  totalMinor        BigInt
+  currency          String              @default("NGN") @db.Char(3)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(6)
+
+  vendor   Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
+  receipts PurchaseReceipt[]
+
+  @@index([vendorId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid()) @db.Uuid
+  purchaseOrderId String  @db.Uuid
+  description     String  @db.VarChar(255)
+  quantity        Decimal @db.Decimal(12, 3)
+  unitPriceMinor  BigInt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_items")
+}
+
+model PurchaseReceipt {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @db.Uuid
+  storageKey      String   @unique @db.VarChar(500)
+  contentHash     String   @db.VarChar(128)
+  receivedAt      DateTime @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@map("purchase_receipts")
+}
+
+model FoodDistribution {
+  id          String                 @id @default(uuid()) @db.Uuid
+  groupId     String                 @db.Uuid
+  status      FoodDistributionStatus @default(PLANNED)
+  scheduledAt DateTime               @db.Timestamptz(6)
+  completedAt DateTime?              @db.Timestamptz(6)
+  createdAt   DateTime               @default(now()) @db.Timestamptz(6)
+
+  group FoodAjoGroup           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  items FoodDistributionItem[]
+
+  @@index([groupId, scheduledAt])
+  @@map("food_distributions")
+}
+
+model FoodDistributionItem {
+  id             String @id @default(uuid()) @db.Uuid
+  distributionId String @db.Uuid
+  subscriptionId String @db.Uuid
+  quantity       Int    @default(1)
+
+  distribution FoodDistribution          @relation(fields: [distributionId], references: [id], onDelete: Restrict)
+  confirmation DistributionConfirmation?
+
+  @@unique([distributionId, subscriptionId])
+  @@map("food_distribution_items")
+}
+
+model DistributionConfirmation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  distributionItemId String   @unique @db.Uuid
+  confirmedByUserId  String   @db.Uuid
+  confirmationHash   String   @db.VarChar(128)
+  confirmedAt        DateTime @default(now()) @db.Timestamptz(6)
+
+  item FoodDistributionItem @relation(fields: [distributionItemId], references: [id], onDelete: Restrict)
+
+  @@map("distribution_confirmations")
+}

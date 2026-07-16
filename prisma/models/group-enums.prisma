@@ -1,0 +1,120 @@
+enum AjoGroupStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+}
+
+enum ContributionFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum AjoMemberRole {
+  GROUP_ADMIN
+  MEMBER
+}
+
+enum AjoMemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  LEFT
+  REMOVED
+}
+
+enum AjoSlotStatus {
+  RESERVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AjoCycleStatus {
+  PENDING
+  OPEN
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ContributionScheduleStatus {
+  PENDING
+  DUE
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  WAIVED
+  CANCELLED
+}
+
+enum ContributionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+}
+
+enum PayoutScheduleStatus {
+  PENDING
+  READY
+  PROCESSING
+  PAID
+  HELD
+  FAILED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+}
+
+enum SwapRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXECUTED
+  EXPIRED
+}
+
+enum SwapApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum PenaltyCalculationType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PenaltyRecordStatus {
+  PENDING
+  ASSESSED
+  PAID
+  WAIVED
+  REVERSED
+}
+
+enum GroupInvitationStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+  EXHAUSTED
+}
+
+enum GroupReferralCodeStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}

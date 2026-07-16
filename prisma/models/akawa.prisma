@@ -1,0 +1,62 @@
+model SavingsGoal {
+  id          String            @id @default(uuid()) @db.Uuid
+  userId      String            @db.Uuid
+  name        String            @db.VarChar(160)
+  targetMinor BigInt
+  currency    String            @default("NGN") @db.Char(3)
+  status      SavingsGoalStatus @default(DRAFT)
+  targetDate  DateTime?         @db.Date
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
+
+  schedules      SavingsSchedule[]
+  contributions  SavingsContribution[]
+  withdrawalRule SavingsWithdrawalRule?
+
+  @@index([userId, status])
+  @@map("savings_goals")
+}
+
+model SavingsSchedule {
+  id          String                @id @default(uuid()) @db.Uuid
+  goalId      String                @db.Uuid
+  amountMinor BigInt
+  currency    String                @db.Char(3)
+  dueAt       DateTime              @db.Timestamptz(6)
+  status      SavingsScheduleStatus @default(PENDING)
+  createdAt   DateTime              @default(now()) @db.Timestamptz(6)
+
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Restrict)
+
+  @@index([goalId, status, dueAt])
+  @@map("savings_schedules")
+}
+
+model SavingsContribution {
+  id                  String        @id @default(uuid()) @db.Uuid
+  goalId              String        @db.Uuid
+  amountMinor         BigInt
+  currency            String        @db.Char(3)
+  status              PaymentStatus @default(PENDING)
+  idempotencyKey      String        @unique @db.VarChar(128)
+  ledgerTransactionId String?       @unique @db.Uuid
+  createdAt           DateTime      @default(now()) @db.Timestamptz(6)
+
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Restrict)
+
+  @@index([goalId, status])
+  @@map("savings_contributions")
+}
+
+model SavingsWithdrawalRule {
+  id         String                    @id @default(uuid()) @db.Uuid
+  goalId     String                    @unique @db.Uuid
+  type       SavingsWithdrawalRuleType
+  unlocksAt  DateTime?                 @db.Timestamptz(6)
+  penaltyBps Int                       @default(0)
+  createdAt  DateTime                  @default(now()) @db.Timestamptz(6)
+
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Restrict)
+
+  @@map("savings_withdrawal_rules")
+}
