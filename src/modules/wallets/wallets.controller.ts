@@ -22,4 +22,11 @@ export class WalletsController {
   ) {
     return this.wallets.transactions(user.userId, walletId);
   }
+  @Get(':walletId/summary')
+  summary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('walletId', ParseUUIDPipe) walletId: string,
+  ) {
+    return this.wallets.summary(user.userId, walletId);
+  }
 }

@@ -15,7 +15,6 @@ export class UsersService {
         phone: true,
         status: true,
         emailVerifiedAt: true,
-        phoneVerifiedAt: true,
         createdAt: true,
         profile: {
           select: {

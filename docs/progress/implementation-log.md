@@ -1,5 +1,73 @@
 # Implementation log
 
+## 2026-07-17 — Email-only account verification
+
+- Replaced the two-stage phone/email registration flow with one email challenge created during
+  registration. Phone is no longer accepted by the registration DTO or required before activation.
+- Removed the public phone-verification route, channel selection from resend, SMS delivery from the
+  verification service, and the account-verification SMS template.
+- Updated deterministic seed data to one email-pending persona while retaining email/password login,
+  challenge HMAC/expiry/attempt/cooldown controls, secure session issuance, and welcome email delivery.
+- Validation: `bun run check` passed with 84 unit tests across 25 suites and a successful build.
+
+- 2026-07-17: Restored local authentication by creating and migrating the configured `ajocloud`
+  development database, corrected the Ajo seed capacity invariant, and enabled development-only
+  pretty Pino output without changing structured production logging.
+
+## 2026-07-17 — Brevo transactional email and SMS
+
+- Installed `@getbrevo/brevo` 6.0.2 and implemented typed API clients for transactional email and
+  SMS using verified official v6 SDK contracts.
+- Replaced the Brevo email stub and auth-only mock SMS branch with replaceable email/SMS provider
+  adapters selected through strict environment validation.
+- Added a versioned, HTML-escaped template catalog for email verification, welcome, password reset,
+  password change, login alerts, Ajo contribution/payout, Food Ajo distribution, Akawo progress, and
+  Bill Payment receipts, plus verification/password-reset SMS.
+- Centralized delivery persistence, deterministic dedupe, safe payload storage, provider message IDs,
+  and generic failure recording. OTPs and raw provider errors are not persisted.
+- Connected phone/email verification and post-activation welcome delivery. Templates for product
+  events remain unconnected until those domain event workflows exist.
+- Local configuration uses the account's active verified email sender and an `AjoCloud` SMS Sender
+  ID; production still requires sender-domain/SMS approval and secret-manager rotation.
+- Validation: `bun run check` passed with 83 unit tests across 24 suites and a successful build; E2E
+  passed; the application booted cleanly with both Brevo providers selected; Brevo account/sender
+  authentication and SMTP relay port `587` were verified without dispatching a live message.
+- Production dependency audit found no high/critical issues. Three unrelated moderate advisories
+  remain in Swagger static assets and Prisma development tooling.
+
+## 2026-07-17 — Local environment and API documentation setup
+
+- Completed the ignored local backend environment with host-reachable PostgreSQL, Redis, and
+  RabbitMQ URLs, strong development-only token secrets, mock external providers, LAN binding, and
+  Swagger enabled.
+- Mounted the interactive OpenAPI explorer at `/docs` while keeping application endpoints under
+  `/api/v1`, and added the Fastify static-assets dependency required to serve Swagger UI.
+- Imported the authentication module into each protected feature module that uses the exported
+  access-token guard, resolving the startup-time `JwtService` dependency error.
+- Made Redis shutdown a no-op for a never-connected lazy client and a direct disconnect for
+  non-ready transitional states.
+- Configured the ignored Expo `.env.local` to call this workstation over its current LAN address.
+- Validation: backend `bun run check` passed with 62 unit tests and a successful build; backend E2E
+  passed; mobile `bun run validate` passed with 24 tests; live `/docs`, `/docs-json`, and liveness
+  probes returned `200` over the LAN.
+- Follow-up: connected the backend to the locally installed Homebrew RabbitMQ broker using its
+  loopback-only development account; AMQP port `5672`, an authenticated channel handshake, and the
+  management UI on port `15672` were verified. Aggregate readiness remains blocked by the missing
+  PostgreSQL `ajocloud` database, not RabbitMQ.
+
+## 2026-07-16 — Mobile wallet and Akawo schedule support
+
+- Financial core: added owner-scoped posted-ledger wallet summary and recent activity APIs for the
+  mobile Wallet phase. Balances derive from available/reserved ledger accounts; no stored or mocked
+  balance is trusted.
+- Akawo: added owner-scoped future schedule creation for active goals. Schedule execution and
+  ledger-backed manual deposits remain explicitly incomplete.
+- Seeds/tests: added a balanced posted opening-wallet transaction and pending Akawo schedule; unit
+  coverage verifies balance derivation, cross-owner denial, schedule serialization, and past-date
+  rejection.
+- Roadmap: Phase 2 received its wallet read extension and Phase 6 now has one task in progress;
+  completion remains 61/122 (50%).
+
 ## 2026-07-16 — Food programme and Akawo read/create APIs
 
 - Roadmap: completed approved-coordinator Food Ajo programme creation, flexible Akawo goal service,

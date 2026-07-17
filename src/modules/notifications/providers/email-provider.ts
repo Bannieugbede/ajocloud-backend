@@ -15,6 +15,7 @@ export interface EmailDeliveryResult {
 }
 
 export interface EmailProvider {
+  readonly name: string;
   send(input: SendEmailInput): Promise<EmailDeliveryResult>;
 }
 

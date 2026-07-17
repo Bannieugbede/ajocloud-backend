@@ -11,6 +11,8 @@ API:
 - `GET /api/v1/akawo/goals` — owner-scoped goals with `savedMinor` and `progressBps`.
 - `GET /api/v1/akawo/goals/:goalId` — owner-scoped detail/progress.
 - `GET /api/v1/akawo/goals/:goalId/statement?cursor=&limit=` — owner-scoped contribution statement.
+- `POST /api/v1/akawo/goals/:goalId/schedules` — create a future schedule for an active owned goal;
+  this records intent and does not claim that money moved.
 
 Locked creation fails closed until its early-withdrawal policy is approved. Manual deposits,
 auto-save execution, and withdrawals remain separate roadmap work; these read/create APIs never fake

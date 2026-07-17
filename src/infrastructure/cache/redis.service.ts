@@ -32,6 +32,11 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.client.status !== 'end') await this.client.quit();
+    if (this.client.status === 'wait' || this.client.status === 'end') return;
+    if (this.client.status === 'ready') {
+      await this.client.quit();
+      return;
+    }
+    this.client.disconnect();
   }
 }

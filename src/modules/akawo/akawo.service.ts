@@ -8,6 +8,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import type { AkawoStatementQueryDto } from './dto/akawo-statement-query.dto.js';
 import type { CreateAkawoGoalDto } from './dto/create-akawo-goal.dto.js';
+import type { CreateAkawoScheduleDto } from './dto/create-akawo-schedule.dto.js';
 
 const goalSelect = {
   id: true,
@@ -120,6 +121,33 @@ export class AkawoService {
       items,
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
     });
+  }
+
+  async createSchedule(
+    userId: string,
+    goalId: string,
+    dto: CreateAkawoScheduleDto,
+  ): Promise<unknown> {
+    const goal = await this.prisma.savingsGoal.findFirst({
+      where: { id: goalId, userId, status: SavingsGoalStatus.ACTIVE },
+      select: { id: true, currency: true },
+    });
+    if (!goal) throw new NotFoundException('Active Akawo goal was not found');
+    const dueAt = new Date(dto.dueAt);
+    if (dueAt <= new Date())
+      throw new UnprocessableEntityException('Schedule date must be in the future');
+    const schedule = await this.prisma.savingsSchedule.create({
+      data: { goalId, amountMinor: BigInt(dto.amountMinor), currency: goal.currency, dueAt },
+      select: {
+        id: true,
+        goalId: true,
+        amountMinor: true,
+        currency: true,
+        dueAt: true,
+        status: true,
+      },
+    });
+    return this.serialize(schedule);
   }
 
   private async requireOwner(userId: string, goalId: string): Promise<void> {

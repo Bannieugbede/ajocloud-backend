@@ -19,8 +19,7 @@ export function verificationCodeMatches(
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export function maskVerificationDestination(channel: 'PHONE' | 'EMAIL', value: string): string {
-  if (channel === 'PHONE') return `${value.slice(0, 4)}••••${value.slice(-3)}`;
+export function maskVerificationDestination(value: string): string {
   const [local = '', domain = ''] = value.split('@');
   return `${local.slice(0, 2)}•••@${domain}`;
 }

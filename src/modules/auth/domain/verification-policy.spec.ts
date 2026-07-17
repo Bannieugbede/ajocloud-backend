@@ -15,7 +15,6 @@ describe('account verification policy', () => {
   });
 
   it('masks destinations without exposing the full address', () => {
-    expect(maskVerificationDestination('PHONE', '+2348012345678')).toBe('+234••••678');
-    expect(maskVerificationDestination('EMAIL', 'member@example.test')).toBe('me•••@example.test');
+    expect(maskVerificationDestination('member@example.test')).toBe('me•••@example.test');
   });
 });

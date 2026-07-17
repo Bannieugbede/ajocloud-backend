@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const optionalUrl = z.union([z.url(), z.literal('')]).optional();
+const optionalEmail = z.union([z.email(), z.literal('')]).optional();
 
 export const environmentSchema = z
   .object({
@@ -38,7 +39,7 @@ export const environmentSchema = z
       .regex(/^[A-Z]{3}$/)
       .default('NGN'),
     APPLICATION_TIMEZONE: z.string().min(1).default('Africa/Lagos'),
-    SMS_PROVIDER: z.string().default('mock'),
+    SMS_PROVIDER: z.enum(['mock', 'brevo']).default('mock'),
     PUSH_PROVIDER: z.string().default('mock'),
     AWS_REGION: z.string().optional(),
     AWS_S3_BUCKET: z.string().optional(),
@@ -57,8 +58,11 @@ export const environmentSchema = z
     DOJAH_SECRET_KEY: z.string().optional(),
     BREVO_BASE_URL: optionalUrl,
     BREVO_API_KEY: z.string().optional(),
-    BREVO_SENDER_EMAIL: z.email().optional(),
+    BREVO_SENDER_EMAIL: optionalEmail,
     BREVO_SENDER_NAME: z.string().optional(),
+    BREVO_SMS_SENDER: z
+      .union([z.string().regex(/^(?:[A-Za-z0-9]{1,11}|[0-9]{12,15})$/), z.literal('')])
+      .optional(),
     SMTP_URL: optionalUrl,
     SMS_API_KEY: z.string().optional(),
     PUSH_API_KEY: z.string().optional(),
@@ -68,12 +72,23 @@ export const environmentSchema = z
   })
   .superRefine((environment, context) => {
     if (environment.EMAIL_PROVIDER === 'brevo') {
-      for (const key of ['BREVO_BASE_URL', 'BREVO_API_KEY', 'BREVO_SENDER_EMAIL'] as const) {
+      for (const key of ['BREVO_API_KEY', 'BREVO_SENDER_EMAIL'] as const) {
         if (!environment[key]) {
           context.addIssue({
             code: 'custom',
             path: [key],
             message: `${key} is required for Brevo`,
+          });
+        }
+      }
+    }
+    if (environment.SMS_PROVIDER === 'brevo') {
+      for (const key of ['BREVO_API_KEY', 'BREVO_SMS_SENDER'] as const) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required for Brevo SMS`,
           });
         }
       }

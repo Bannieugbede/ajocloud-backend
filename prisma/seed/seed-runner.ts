@@ -13,6 +13,8 @@ import {
   FoodCoordinatorApplicationStatus,
   KycStatus,
   KycTier,
+  LedgerEntryDirection,
+  LedgerTransactionStatus,
   SavingsGoalStatus,
   SavingsGoalType,
   UserStatus,
@@ -92,14 +94,12 @@ export async function runSeed(): Promise<void> {
       where: { email: 'ada.admin@example.test' },
       update: {
         phone: '+2348010000001',
-        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
         emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
       },
       create: {
         email: 'ada.admin@example.test',
         phone: '+2348010000001',
         status: UserStatus.ACTIVE,
-        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
         emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
         profile: { create: { firstName: 'Ada', lastName: 'Testadmin' } },
         credential: { create: { passwordHash } },
@@ -109,43 +109,13 @@ export async function runSeed(): Promise<void> {
 
     const tokenPepper = process.env.TOKEN_PEPPER;
     if (!tokenPepper) throw new Error('TOKEN_PEPPER is required for verification seed data');
-    const phonePending = await prisma.user.upsert({
-      where: { email: 'phone.pending@example.test' },
-      update: {},
-      create: {
-        id: '40000000-0000-4000-8000-000000000001',
-        email: 'phone.pending@example.test',
-        phone: '+2348010000002',
-        status: UserStatus.PENDING_VERIFICATION,
-        profile: { create: { firstName: 'Phone', lastName: 'Pending' } },
-        credential: { create: { passwordHash } },
-        roleAssignments: { create: { roleId: required(roles, 'MEMBER') } },
-      },
-    });
-    const phoneChallengeId = '40000000-0000-4000-8000-000000000011';
-    await prisma.accountVerificationChallenge.upsert({
-      where: { id: phoneChallengeId },
-      update: {},
-      create: {
-        id: phoneChallengeId,
-        userId: phonePending.id,
-        channel: AccountVerificationChannel.PHONE,
-        codeHash: verificationCodeHash(phoneChallengeId, '111111', tokenPepper),
-        destinationMasked: '+234••••002',
-        expiresAt: new Date('2099-01-01T00:00:00Z'),
-        resendAvailableAt: new Date('2026-01-01T00:00:00Z'),
-      },
-    });
-
     const emailPending = await prisma.user.upsert({
       where: { email: 'email.pending@example.test' },
       update: {},
       create: {
         id: '40000000-0000-4000-8000-000000000002',
         email: 'email.pending@example.test',
-        phone: '+2348010000003',
         status: UserStatus.PENDING_VERIFICATION,
-        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
         profile: { create: { firstName: 'Email', lastName: 'Pending' } },
         credential: { create: { passwordHash } },
         roleAssignments: { create: { roleId: required(roles, 'MEMBER') } },
@@ -285,6 +255,44 @@ export async function runSeed(): Promise<void> {
       });
     }
 
+    const availableAccount = await prisma.financialAccount.findUniqueOrThrow({
+      where: { code: `WALLET:${adminWallet.id}:AVAILABLE` },
+    });
+    const providerPayableAccount = await prisma.financialAccount.findUniqueOrThrow({
+      where: { code: 'PLATFORM:PROVIDER_PAYABLE:NGN' },
+    });
+    await prisma.ledgerTransaction.upsert({
+      where: { idempotencyKey: 'seed:admin-wallet-opening-balance' },
+      update: {},
+      create: {
+        reference: 'SEED-WALLET-OPENING-BALANCE',
+        idempotencyKey: 'seed:admin-wallet-opening-balance',
+        description: 'Development wallet opening balance',
+        currency: 'NGN',
+        status: LedgerTransactionStatus.POSTED,
+        initiatedByUserId: admin.id,
+        postedAt: new Date('2026-07-16T00:00:00Z'),
+        entries: {
+          create: [
+            {
+              accountId: providerPayableAccount.id,
+              direction: LedgerEntryDirection.DEBIT,
+              amountMinor: 250_000_00n,
+              currency: 'NGN',
+              sequence: 1,
+            },
+            {
+              accountId: availableAccount.id,
+              direction: LedgerEntryDirection.CREDIT,
+              amountMinor: 250_000_00n,
+              currency: 'NGN',
+              sequence: 2,
+            },
+          ],
+        },
+      },
+    });
+
     await prisma.publicAppConfiguration.upsert({
       where: { key_version: { key: 'brand', version: 1 } },
       update: {},
@@ -316,7 +324,9 @@ export async function runSeed(): Promise<void> {
         contributionFrequency: ContributionFrequency.MONTHLY,
         baseContributionMinor: 25_000_00n,
         currency: 'NGN',
+        maxMembers: 6,
         maxSlots: 6,
+        maxSlotsPerMember: 6,
         startDate: new Date('2026-08-01'),
         endDate: new Date('2027-01-01'),
         createdByUserId: admin.id,
@@ -378,7 +388,7 @@ export async function runSeed(): Promise<void> {
         });
       }
     }
-    await prisma.savingsGoal.upsert({
+    const savingsGoal = await prisma.savingsGoal.upsert({
       where: { id: '30000000-0000-4000-8000-000000000001' },
       update: { name: 'Annual Rent', status: SavingsGoalStatus.ACTIVE },
       create: {
@@ -389,6 +399,17 @@ export async function runSeed(): Promise<void> {
         targetMinor: 600_000_00n,
         status: SavingsGoalStatus.ACTIVE,
         targetDate: new Date('2027-06-30'),
+      },
+    });
+    await prisma.savingsSchedule.upsert({
+      where: { id: '30000000-0000-4000-8000-000000000002' },
+      update: { amountMinor: 50_000_00n, dueAt: new Date('2026-08-15T09:00:00Z') },
+      create: {
+        id: '30000000-0000-4000-8000-000000000002',
+        goalId: savingsGoal.id,
+        amountMinor: 50_000_00n,
+        currency: 'NGN',
+        dueAt: new Date('2026-08-15T09:00:00Z'),
       },
     });
   } finally {

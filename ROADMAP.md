@@ -10,13 +10,13 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        0 |           0 |       0 |         0% |
 | 5 Food Ajo                     |      13 |        4 |           0 |       0 |      30.8% |
-| 6 Akawo                        |       7 |        3 |           0 |       0 |      42.9% |
+| 6 Akawo                        |       7 |        3 |           1 |       0 |      42.9% |
 | 7 Bill Payment                 |      11 |        6 |           0 |       2 |      54.5% |
 | 8 Progressive KYC              |       8 |        2 |           0 |       1 |        25% |
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
-| 10 Notifications               |       8 |        4 |           0 |       0 |        50% |
+| 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **122** |   **61** |       **0** |   **4** |    **50%** |
+| **Total**                      | **122** |   **62** |       **2** |   **4** |  **50.8%** |
 
 ## Phase 0 — Foundation
 
@@ -38,7 +38,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 ## Phase 1 — Identity and security foundation
 
 - [x] **COMPLETE** Users
-- [x] **COMPLETE** Password authentication, phone/email account verification, and consent recording
+- [x] **COMPLETE** Password authentication, email account verification, and consent recording
 - [x] **COMPLETE** Sessions and refresh-token reuse handling
 - [ ] **NOT STARTED** Device-management API (schema exists)
 - [x] **COMPLETE** Roles
@@ -53,6 +53,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 - [x] **COMPLETE** Double-entry ledger posting/reversal
 - [x] **COMPLETE** Idempotency persistence
 - [x] **COMPLETE** Available/reserved wallet account semantics used by Bill Payment
+  - Extended with owner-scoped derived wallet summary and activity APIs for the mobile wallet phase.
 - [ ] **NOT STARTED** General payment-provider implementation (schema only)
 - [ ] **NOT STARTED** Verified webhook intake framework
 - [ ] **NOT STARTED** General reconciliation service
@@ -114,7 +115,8 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Flexible savings goal creation and owner-scoped reads
 - [x] **COMPLETE** Target/goal creation, progress, and paginated statements
 - [ ] **NOT STARTED** Locked savings and early-withdrawal rules
-- [ ] **NOT STARTED** Auto-save schedules and manual deposits
+- [ ] **IN PROGRESS** Auto-save schedules and manual deposits — schedule creation implemented;
+      execution and ledger-backed manual deposits require Akawo financial-account ownership support
 - [ ] **NOT STARTED** Ledger-backed withdrawal workflow
 - [ ] **DEFERRED / POST-MVP** Institutional products, enrolment, yield, settlement, tax, and reconciliation per ADR-003
 
@@ -159,8 +161,12 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Generic email interface and safe console provider
 - [ ] **NOT STARTED** Scheduled reminder engine
 - [ ] **NOT STARTED** BullMQ delivery retries/dead-letter operations
-- [ ] **NOT STARTED** Full product event template catalog and delivery services
-- [ ] **NOT STARTED** Brevo adapter evaluation/approval (currently under consideration)
+- [ ] **IN PROGRESS** Full product event template catalog and delivery services — versioned welcome,
+      authentication, security, Ajo, Food Ajo, Akawo, and Bill Payment templates exist; only account
+      verification and welcome lifecycle orchestration are currently connected
+- [x] **COMPLETE** Brevo transactional email/SMS adapters through the official SDK with generic
+      provider boundaries, validated configuration, deterministic dedupe, persisted message IDs,
+      redacted failures, and safe console/mock alternatives
 
 ## Phase 11 — Scale and resilience
 

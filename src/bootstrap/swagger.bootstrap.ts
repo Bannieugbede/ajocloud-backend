@@ -10,5 +10,9 @@ export function configureSwagger(app: NestFastifyApplication, env: Environment):
     .setVersion(env.APP_VERSION)
     .addBearerAuth()
     .build();
-  SwaggerModule.setup(`${env.API_PREFIX}/docs`, app, SwaggerModule.createDocument(app, config));
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, documentFactory, {
+    customSiteTitle: 'Ajo Cloud API Docs',
+    swaggerOptions: { persistAuthorization: true },
+  });
 }

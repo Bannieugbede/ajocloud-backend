@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Environment } from '../../config/env.schema.js';
 import { MonnifyBillPaymentProvider } from '../../infrastructure/external-services/monnify/monnify-bill-payment.provider.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
+import { AuthModule } from '../auth/auth.module.js';
 import { BillPaymentsController } from './bill-payments.controller.js';
 import { AdminBillPaymentsController } from './admin-bill-payments.controller.js';
 import { BillPaymentsService } from './bill-payments.service.js';
@@ -10,7 +11,7 @@ import { BILL_PAYMENT_PROVIDER } from './providers/bill-payment-provider.js';
 import { MockBillPaymentProvider } from './providers/mock-bill-payment.provider.js';
 
 @Module({
-  imports: [LedgerModule],
+  imports: [AuthModule, LedgerModule],
   controllers: [BillPaymentsController, AdminBillPaymentsController],
   providers: [
     BillPaymentsService,

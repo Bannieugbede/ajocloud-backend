@@ -1,5 +1,4 @@
-import { IsEnum, IsString, IsUUID, Matches } from 'class-validator';
-import { AccountVerificationChannel } from '../../../../generated/prisma/enums.js';
+import { IsString, IsUUID, Matches } from 'class-validator';
 
 export class VerifyAccountDto {
   @IsUUID()
@@ -13,7 +12,4 @@ export class VerifyAccountDto {
 export class ResendVerificationDto {
   @IsUUID()
   userId!: string;
-
-  @IsEnum(AccountVerificationChannel)
-  channel!: AccountVerificationChannel;
 }

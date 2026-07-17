@@ -15,6 +15,7 @@ import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { AkawoService } from './akawo.service.js';
 import { AkawoStatementQueryDto } from './dto/akawo-statement-query.dto.js';
 import { CreateAkawoGoalDto } from './dto/create-akawo-goal.dto.js';
+import { CreateAkawoScheduleDto } from './dto/create-akawo-schedule.dto.js';
 
 @ApiTags('akawo')
 @ApiBearerAuth()
@@ -45,5 +46,14 @@ export class AkawoController {
     @Query() query: AkawoStatementQueryDto,
   ) {
     return this.akawo.statement(user.userId, goalId, query);
+  }
+
+  @Post(':goalId/schedules')
+  createSchedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('goalId', ParseUUIDPipe) goalId: string,
+    @Body() dto: CreateAkawoScheduleDto,
+  ) {
+    return this.akawo.createSchedule(user.userId, goalId, dto);
   }
 }

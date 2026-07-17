@@ -4,10 +4,22 @@
 
 ### Added
 
+- Official Brevo SDK integration for transactional email and SMS, including persisted delivery
+  results, welcome/auth/security/product templates, and welcome delivery after account activation.
+- LAN-ready local backend/mobile environment configuration and interactive API documentation at
+  `/docs`.
+- Correct authentication-guard dependency wiring for protected feature modules so the API can
+  bootstrap successfully.
+- Safe shutdown for a lazy Redis client that was never connected.
+- Owner-scoped wallet available/reserved summary and recent posted-ledger activity APIs.
+- Future Akawo savings schedule creation for active owner goals, with development seed records and
+  service tests.
+
 - Approved-coordinator Food Ajo draft programme creation and guarded programme list/detail APIs.
 - Owner-scoped flexible and target Akawo goal creation, progress, detail, and paginated statement APIs.
 
-- Two-stage phone/email account verification with HMAC-only OTP challenges, resend/attempt limits, versioned registration consent, delivery/audit records, deterministic development personas, and additive migration.
+- Email account verification with HMAC-only OTP challenges, resend/attempt limits, versioned
+  registration consent, delivery/audit records, and a deterministic development persona.
 
 - Fastify NestJS modular-monolith foundation with strict configuration, logging, security, health, API documentation, workers, and scheduler.
 - Multi-file Prisma financial data model, environment-safe seeds, and initial migration.
@@ -21,5 +33,10 @@
 
 ### Changed
 
+- Account registration and activation now use one email verification challenge; phone collection,
+  phone OTP delivery, and the public phone-verification endpoint were removed from the auth flow.
+- Development API logs now use readable, colorized Pino formatting while production and test logs
+  remain structured JSON.
+- Corrected the development Ajo seed capacity so a fresh migrated database seeds completely.
 - Standardized the canonical savings product spelling from `Akawa` to `Akawo` without renaming existing database tables.
 - Expanded financial accounts with explicit available/reserved/provider-payable/fee purposes and registration-time wallet accounts.

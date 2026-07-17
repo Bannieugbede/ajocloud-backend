@@ -9,6 +9,7 @@ Ajo Cloud is a modular-monolith backend for Traditional Ajo, Akawo savings, Food
 - TypeScript 5.9 in strict mode
 - Prisma ORM 7.8 with PostgreSQL adapter; PostgreSQL 18 locally
 - Redis 8, BullMQ 5, RabbitMQ 4
+- Brevo Node SDK 6 for transactional email and SMS
 - Pino JSON logging, Zod environment validation, Swagger/OpenAPI
 
 ## Prerequisites
@@ -28,6 +29,10 @@ ALLOW_SEED=true bun run prisma:seed
 
 Replace all local placeholder secrets before starting the API. Never use example values in a shared or production environment.
 
+To use Brevo, set `EMAIL_PROVIDER=brevo`, `SMS_PROVIDER=brevo`, `BREVO_API_KEY`, a verified
+`BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, and an approved `BREVO_SMS_SENDER`. SMTP relay
+credentials may be kept in `SMTP_URL`, but the application adapters use Brevo's authenticated API.
+
 ## Running processes
 
 ```bash
@@ -36,7 +41,10 @@ bun run start:worker
 bun run start:scheduler
 ```
 
-The API defaults to `http://localhost:3000/api/v1`. Swagger is at `/api/docs`; liveness and readiness are `/api/v1/health/live` and `/api/v1/health/ready`. Registration uses phone then email verification before issuing a session. RabbitMQ's local-only management UI is at `http://localhost:15672`.
+The API defaults to `http://localhost:3000/api/v1`. Interactive Swagger API documentation is at
+`http://localhost:3000/docs`; liveness and readiness are `/api/v1/health/live` and
+`/api/v1/health/ready`. Registration uses email verification before issuing a session.
+RabbitMQ's local-only management UI is at `http://localhost:15672`.
 
 ## Database and Prisma
 
@@ -83,6 +91,7 @@ bun run check
 - [Bill Payment](docs/bill-payments.md), [progressive KYC](docs/kyc.md), [Food Ajo](docs/food-ajo.md), [Akawo](docs/akawo.md), [referrals](docs/referrals.md)
 - [Authentication](docs/authentication.md), [authorization](docs/authorization.md), [API conventions](docs/api-conventions.md)
 - [Messaging](docs/messaging.md), [observability](docs/observability.md), [testing](docs/testing.md)
+- [Notifications](docs/notifications.md) and [Brevo provider selection](docs/open-questions/email-provider-selection.md)
 - [Local development](docs/local-development.md), [deployment](docs/deployment.md), [security policy](SECURITY.md)
 - [Roadmap](ROADMAP.md), [current status](docs/progress/current-status.md), [implementation log](docs/progress/implementation-log.md)
 - [ADRs](docs/adr/README.md), [open financial questions](docs/open-questions/ajo-financial-rules.md)

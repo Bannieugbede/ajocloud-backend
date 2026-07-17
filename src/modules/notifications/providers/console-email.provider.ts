@@ -4,6 +4,7 @@ import type { EmailDeliveryResult, EmailProvider, SendEmailInput } from './email
 
 @Injectable()
 export class ConsoleEmailProvider implements EmailProvider {
+  readonly name = 'console';
   private readonly logger = new Logger(ConsoleEmailProvider.name);
 
   send(input: SendEmailInput): Promise<EmailDeliveryResult> {

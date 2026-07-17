@@ -23,6 +23,7 @@ import type { Environment } from '../../config/env.schema.js';
 import type { AccountVerificationChallenge } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
+import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
 import {
@@ -68,6 +69,7 @@ export class AuthService {
     private readonly transactions: TransactionService,
     private readonly jwt: JwtService,
     private readonly verificationDelivery: VerificationDeliveryService,
+    private readonly notifications: TransactionalNotificationService,
     config: ConfigService<Environment, true>,
   ) {
     this.accessSecret = config.get('JWT_ACCESS_SECRET', { infer: true });
@@ -79,8 +81,7 @@ export class AuthService {
 
   async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
     const email = dto.email.trim().toLowerCase();
-    const phone = dto.phone.trim();
-    const challenge = this.newChallenge(AccountVerificationChannel.PHONE, phone);
+    const challenge = this.newChallenge(email);
     const passwordHash = await hash(dto.password, {
       type: argon2id,
       memoryCost: 65_536,
@@ -97,7 +98,6 @@ export class AuthService {
         const created = await tx.user.create({
           data: {
             email,
-            phone,
             status: UserStatus.PENDING_VERIFICATION,
             credential: { create: { passwordHash } },
             profile: { create: { firstName: dto.firstName.trim(), lastName: dto.lastName.trim() } },
@@ -156,7 +156,7 @@ export class AuthService {
       });
       const deliveryStatus = await this.deliverChallenge({
         userId: user.id,
-        destination: phone,
+        destination: email,
         challenge,
       });
       return this.challengeResponse(user.id, challenge, deliveryStatus);
@@ -168,82 +168,13 @@ export class AuthService {
     }
   }
 
-  async verifyPhone(
-    userId: string,
-    code: string,
-  ): Promise<VerificationChallengeResult & { nextStep: 'VERIFY_EMAIL' }> {
-    const result = await this.transactions.serializable(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId } });
-      if (!user?.phone || !user.email) return { kind: 'missing' } as const;
-      if (user.phoneVerifiedAt) return { kind: 'already', email: user.email } as const;
-      const challenge = await tx.accountVerificationChallenge.findFirst({
-        where: {
-          userId,
-          channel: AccountVerificationChannel.PHONE,
-          consumedAt: null,
-          invalidatedAt: null,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (!challenge) return { kind: 'expired' } as const;
-      const validation = this.validateChallenge(challenge, code);
-      if (validation === 'invalid') {
-        const attempts = challenge.attemptCount + 1;
-        await tx.accountVerificationChallenge.update({
-          where: { id: challenge.id },
-          data: {
-            attemptCount: attempts,
-            ...(attempts >= challenge.maxAttempts ? { invalidatedAt: new Date() } : {}),
-          },
-        });
-        return { kind: 'invalid' } as const;
-      }
-      if (validation === 'expired') return { kind: 'expired' } as const;
-      if (validation === 'locked') return { kind: 'locked' } as const;
-      const emailChallenge = this.newChallenge(AccountVerificationChannel.EMAIL, user.email);
-      await tx.accountVerificationChallenge.update({
-        where: { id: challenge.id },
-        data: { consumedAt: new Date() },
-      });
-      await tx.user.update({ where: { id: userId }, data: { phoneVerifiedAt: new Date() } });
-      await tx.accountVerificationChallenge.updateMany({
-        where: {
-          userId,
-          channel: AccountVerificationChannel.EMAIL,
-          consumedAt: null,
-          invalidatedAt: null,
-        },
-        data: { invalidatedAt: new Date() },
-      });
-      await tx.accountVerificationChallenge.create({ data: { ...emailChallenge.data, userId } });
-      return { kind: 'verified', email: user.email, challenge: emailChallenge } as const;
-    });
-    if (result.kind === 'missing') throw new NotFoundException('Verification request not found');
-    if (result.kind === 'expired') throw new BadRequestException('Verification code has expired');
-    if (result.kind === 'locked')
-      throw new HttpException('Verification attempts exceeded', HttpStatus.TOO_MANY_REQUESTS);
-    if (result.kind === 'invalid') throw new UnauthorizedException('Verification code is invalid');
-    if (result.kind === 'already') {
-      return this.resendVerification(userId, AccountVerificationChannel.EMAIL).then((response) => ({
-        ...response,
-        nextStep: 'VERIFY_EMAIL' as const,
-      }));
-    }
-    const deliveryStatus = await this.deliverChallenge({
-      userId,
-      destination: result.email,
-      challenge: result.challenge,
-    });
-    return {
-      ...this.challengeResponse(userId, result.challenge, deliveryStatus),
-      nextStep: 'VERIFY_EMAIL',
-    };
-  }
-
   async verifyEmail(userId: string, code: string, context: ClientContext): Promise<TokenPair> {
     const result = await this.transactions.serializable(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId } });
-      if (!user?.email || !user.phoneVerifiedAt) return { kind: 'missing' } as const;
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        include: { profile: true },
+      });
+      if (!user?.email) return { kind: 'missing' } as const;
       if (user.emailVerifiedAt && user.status === UserStatus.ACTIVE)
         return { kind: 'already' } as const;
       const challenge = await tx.accountVerificationChallenge.findFirst({
@@ -286,7 +217,11 @@ export class AuthService {
           subjectId: userId,
         },
       });
-      return { kind: 'verified' } as const;
+      return {
+        kind: 'verified',
+        email: user.email,
+        firstName: user.profile?.firstName ?? 'there',
+      } as const;
     });
     if (result.kind === 'missing') throw new NotFoundException('Verification request not found');
     if (result.kind === 'already') throw new ConflictException('Email is already verified');
@@ -294,28 +229,42 @@ export class AuthService {
     if (result.kind === 'locked')
       throw new HttpException('Verification attempts exceeded', HttpStatus.TOO_MANY_REQUESTS);
     if (result.kind === 'invalid') throw new UnauthorizedException('Verification code is invalid');
-    return this.createSession(userId, context);
+    const tokens = await this.createSession(userId, context);
+    await this.notifications.sendEmail({
+      userId,
+      destination: result.email,
+      template: 'welcome',
+      variables: { firstName: result.firstName },
+      storedPayload: { event: 'account-verified' },
+      dedupeKey: `welcome:${userId}`,
+    });
+    return tokens;
   }
 
-  async resendVerification(
-    userId: string,
-    channel: AccountVerificationChannel,
-  ): Promise<VerificationChallengeResult> {
+  async resendVerification(userId: string): Promise<VerificationChallengeResult> {
     const result = await this.transactions.serializable(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: userId } });
-      const destination = channel === AccountVerificationChannel.PHONE ? user?.phone : user?.email;
-      if (!user || !destination) return { kind: 'missing' } as const;
-      if (channel === AccountVerificationChannel.EMAIL && !user.phoneVerifiedAt)
-        return { kind: 'missing' } as const;
+      const destination = user?.email;
+      if (!user || !destination || user.emailVerifiedAt) return { kind: 'missing' } as const;
       const latest = await tx.accountVerificationChallenge.findFirst({
-        where: { userId, channel, consumedAt: null, invalidatedAt: null },
+        where: {
+          userId,
+          channel: AccountVerificationChannel.EMAIL,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
         orderBy: { createdAt: 'desc' },
       });
       if (latest && latest.resendAvailableAt > new Date())
         return { kind: 'cooldown', retryAt: latest.resendAvailableAt } as const;
-      const challenge = this.newChallenge(channel, destination);
+      const challenge = this.newChallenge(destination);
       await tx.accountVerificationChallenge.updateMany({
-        where: { userId, channel, consumedAt: null, invalidatedAt: null },
+        where: {
+          userId,
+          channel: AccountVerificationChannel.EMAIL,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
         data: { invalidatedAt: new Date() },
       });
       await tx.accountVerificationChallenge.create({ data: { ...challenge.data, userId } });
@@ -437,7 +386,7 @@ export class AuthService {
     };
   }
 
-  private newChallenge(channel: AccountVerificationChannel, destination: string) {
+  private newChallenge(destination: string) {
     const id = randomUUID();
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const now = Date.now();
@@ -446,14 +395,14 @@ export class AuthService {
     return {
       id,
       code,
-      destinationMasked: maskVerificationDestination(channel, destination),
+      destinationMasked: maskVerificationDestination(destination),
       expiresAt,
       resendAvailableAt,
       data: {
         id,
-        channel,
+        channel: AccountVerificationChannel.EMAIL,
         codeHash: verificationCodeHash(id, code, this.tokenPepper),
-        destinationMasked: maskVerificationDestination(channel, destination),
+        destinationMasked: maskVerificationDestination(destination),
         expiresAt,
         resendAvailableAt,
         maxAttempts: VERIFICATION_MAX_ATTEMPTS,
@@ -481,7 +430,6 @@ export class AuthService {
       await this.verificationDelivery.send({
         userId: input.userId,
         challengeId: input.challenge.id,
-        channel: input.challenge.data.channel,
         destination: input.destination,
         destinationMasked: input.challenge.destinationMasked,
         code: input.challenge.code,

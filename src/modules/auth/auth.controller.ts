@@ -29,13 +29,6 @@ export class AuthController {
     return this.auth.login(dto, this.context(request));
   }
 
-  @Post('verify-phone')
-  @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  verifyPhone(@Body() dto: VerifyAccountDto) {
-    return this.auth.verifyPhone(dto.userId, dto.code);
-  }
-
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -47,7 +40,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   resendVerification(@Body() dto: ResendVerificationDto) {
-    return this.auth.resendVerification(dto.userId, dto.channel);
+    return this.auth.resendVerification(dto.userId);
   }
 
   @Post('refresh')
