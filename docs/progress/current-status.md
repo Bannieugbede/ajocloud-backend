@@ -24,6 +24,10 @@ user/group/goal/Food Ajo/bill-payment/ledger/KYC/coordinator listings, per-user 
 versioned fee definitions, and platform settings (brand configuration, roles, fee count). A
 deterministic admin demo seed populates all of these surfaces locally.
 
+A public engagement API (`/api/v1/engagement/waitlist` and `/api/v1/engagement/support-inquiries`)
+captures pre-launch waitlist sign-ups (names, email, `+234` phone, promotion opt-in) and visitor
+support inquiries. Admins review both through dedicated read endpoints and the web admin console.
+
 ## In progress
 
 Akawo auto-save is **IN PROGRESS**: authenticated users can create future schedules for their own

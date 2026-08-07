@@ -25,6 +25,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
 import { AkawoModule } from './modules/akawo/akawo.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
+import { EngagementModule } from './modules/engagement/engagement.module.js';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { AdminModule } from './modules/admin/admin.module.js';
     FoodAjoModule,
     AkawoModule,
     AdminModule,
+    EngagementModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -1,0 +1,34 @@
+// Public engagement models: pre-launch waitlist and support inquiries.
+// These are lightweight marketing/ops surfaces — statuses are stored as
+// validated strings rather than enums to keep the schema stable.
+
+model WaitlistEntry {
+  id              String    @id @default(uuid()) @db.Uuid
+  firstName       String    @db.VarChar(100)
+  lastName        String    @db.VarChar(100)
+  email           String    @db.VarChar(320)
+  phone           String    @db.VarChar(20)
+  wantsPromotions Boolean   @default(false)
+  status          String    @default("ACTIVE") @db.VarChar(20)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([email])
+  @@index([status, createdAt])
+  @@map("waitlist_entries")
+}
+
+model SupportInquiry {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(200)
+  email     String   @db.VarChar(320)
+  phone     String?  @db.VarChar(20)
+  subject   String   @db.VarChar(200)
+  message   String   @db.Text
+  status    String   @default("OPEN") @db.VarChar(20)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@map("support_inquiries")
+}

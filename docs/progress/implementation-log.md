@@ -1,5 +1,18 @@
 # Implementation log
 
+## 2026-08-07 — Public engagement API (waitlist + support)
+
+- Added a public `EngagementModule` under `/api/v1/engagement` with
+  `POST /waitlist` and `POST /support-inquiries`, validated with class-validator DTOs including
+  Nigerian mobile numbers in `+234` E.164 format.
+- Added `WaitlistEntry` and `SupportInquiry` Prisma models (migration `20260807095001_waitlist_support`)
+  with status-as-string for flexibility and indexes on status/createdAt; waitlist upserts on email.
+- Exposed admin read endpoints `GET /admin/waitlist` and `GET /admin/support-inquiries`
+  (permission `users.read`) with the shared paginated list shape.
+- Seeded deterministic waitlist entries and support inquiries in the admin demo seeder.
+- Validation: migration applied to the local `ajocloud` database, seed ran cleanly (5 waitlist,
+  4 inquiries), `bun run check` passed.
+
 ## 2026-08-07 — Admin read API and demo seed
 
 - Added an `AdminModule` exposing read-only, permission-gated endpoints under `/api/v1/admin` to

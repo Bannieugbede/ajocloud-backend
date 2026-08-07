@@ -629,6 +629,135 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
     }
   }
 
+  // --- Waitlist entries ---
+  const waitlistSeed = [
+    {
+      id: '70000000-0000-4000-8000-000000000001',
+      firstName: 'Ngozi',
+      lastName: 'Eze',
+      email: 'ngozi.eze@example.test',
+      phone: '+2348011111111',
+      wantsPromotions: true,
+      createdAt: '2026-08-01T09:12:00Z',
+    },
+    {
+      id: '70000000-0000-4000-8000-000000000002',
+      firstName: 'Segun',
+      lastName: 'Adeyemi',
+      email: 'segun.adeyemi@example.test',
+      phone: '+2348022222222',
+      wantsPromotions: false,
+      createdAt: '2026-08-02T14:40:00Z',
+    },
+    {
+      id: '70000000-0000-4000-8000-000000000003',
+      firstName: 'Chiamaka',
+      lastName: 'Obi',
+      email: 'chiamaka.obi@example.test',
+      phone: '+2348033333333',
+      wantsPromotions: true,
+      createdAt: '2026-08-03T11:05:00Z',
+    },
+    {
+      id: '70000000-0000-4000-8000-000000000004',
+      firstName: 'Ibrahim',
+      lastName: 'Yusuf',
+      email: 'ibrahim.yusuf@example.test',
+      phone: '+2348044444444',
+      wantsPromotions: true,
+      createdAt: '2026-08-05T16:22:00Z',
+    },
+    {
+      id: '70000000-0000-4000-8000-000000000005',
+      firstName: 'Funke',
+      lastName: 'Alabi',
+      email: 'funke.alabi@example.test',
+      phone: '+2348055555555',
+      wantsPromotions: false,
+      createdAt: '2026-08-06T08:45:00Z',
+    },
+  ];
+  for (const entry of waitlistSeed) {
+    await prisma.waitlistEntry.upsert({
+      where: { id: entry.id },
+      update: { status: 'ACTIVE' },
+      create: {
+        id: entry.id,
+        firstName: entry.firstName,
+        lastName: entry.lastName,
+        email: entry.email,
+        phone: entry.phone,
+        wantsPromotions: entry.wantsPromotions,
+        status: 'ACTIVE',
+        createdAt: new Date(entry.createdAt),
+      },
+    });
+  }
+
+  // --- Support inquiries ---
+  const inquirySeed = [
+    {
+      id: '80000000-0000-4000-8000-000000000001',
+      name: 'Ngozi Eze',
+      email: 'ngozi.eze@example.test',
+      phone: '+2348011111111',
+      subject: 'How do I create a second Ajo group?',
+      message:
+        'I already run one group with my colleagues and want to start a second one for my church. Can I run both at the same time on my account?',
+      status: 'OPEN',
+      createdAt: '2026-08-04T10:18:00Z',
+    },
+    {
+      id: '80000000-0000-4000-8000-000000000002',
+      name: 'Segun Adeyemi',
+      email: 'segun.adeyemi@example.test',
+      phone: '+2348022222222',
+      subject: 'Problem with Food Ajo delivery slot',
+      message:
+        'My programme said delivery happens on the first Saturday, but I did not receive my basket and no one from support responded in the group chat.',
+      status: 'OPEN',
+      createdAt: '2026-08-05T13:30:00Z',
+    },
+    {
+      id: '80000000-0000-4000-8000-000000000003',
+      name: 'Chiamaka Obi',
+      email: 'chiamaka.obi@example.test',
+      phone: '+2348033333333',
+      subject: 'Suggesting a flexible contribution option',
+      message:
+        'Some members in my circle want to contribute different amounts each cycle. Would you consider a flexible contribution mode for Ajo groups?',
+      status: 'RESOLVED',
+      createdAt: '2026-08-02T09:00:00Z',
+    },
+    {
+      id: '80000000-0000-4000-8000-000000000004',
+      name: 'Ibrahim Yusuf',
+      email: 'ibrahim.yusuf@example.test',
+      phone: '+2348044444444',
+      subject: 'Receipt for bill payment not showing',
+      message:
+        'I paid for airtime yesterday and the money left my wallet, but I cannot see the receipt in my transaction history. Please check my account.',
+      status: 'OPEN',
+      createdAt: '2026-08-06T17:05:00Z',
+    },
+  ];
+  for (const inquiry of inquirySeed) {
+    await prisma.supportInquiry.upsert({
+      where: { id: inquiry.id },
+      update: { status: inquiry.status },
+      create: {
+        id: inquiry.id,
+        name: inquiry.name,
+        email: inquiry.email,
+        phone: inquiry.phone,
+        subject: inquiry.subject,
+        message: inquiry.message,
+        status: inquiry.status,
+        createdAt: new Date(inquiry.createdAt),
+      },
+    });
+  }
+
   // Ensure a LOCKED group has a schedule version + a couple of cycles so the group page is rich
   const lockedGroup = await prisma.ajoGroup.findUniqueOrThrow({
     where: { id: '10000000-0000-4000-8000-000000000011' },

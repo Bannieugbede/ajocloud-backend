@@ -4,6 +4,11 @@
 
 ### Added
 
+- Public engagement API: `POST /api/v1/engagement/waitlist` (join the pre-launch waitlist with
+  names, email, +234-normalized phone, and promotion opt-in) and
+  `POST /api/v1/engagement/support-inquiries` (submit a support inquiry), backed by new
+  `waitlist_entries` and `support_inquiries` tables with deterministic demo seed data.
+- Admin read endpoints for waitlist entries and support inquiries under `/api/v1/admin`.
 - Permission-gated admin read API under `/api/v1/admin`: platform overview KPIs, paginated
   user/Ajo-group/Akawo/Food-Ajo/bill-payment/ledger/KYC/coordinator listings, user and group detail,
   fee definitions, and platform settings.

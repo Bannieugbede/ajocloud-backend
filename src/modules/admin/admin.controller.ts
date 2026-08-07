@@ -79,6 +79,18 @@ export class AdminController {
     return this.admin.listCoordinators(query);
   }
 
+  @Get('waitlist')
+  @RequirePermissions('users.read')
+  listWaitlist(@Query() query: AdminListQueryDto) {
+    return this.admin.listWaitlist(query);
+  }
+
+  @Get('support-inquiries')
+  @RequirePermissions('users.read')
+  listSupportInquiries(@Query() query: AdminListQueryDto) {
+    return this.admin.listSupportInquiries(query);
+  }
+
   @Get('fees')
   @RequirePermissions('fees.manage')
   listFees() {

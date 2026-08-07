@@ -399,6 +399,52 @@ export class AdminService {
     return this.paginate(enriched, limit);
   }
 
+  async listWaitlist(query: AdminListQueryDto): Promise<unknown> {
+    const limit = query.limit;
+    const where = query.status ? { status: query.status } : {};
+    const entries = await this.prisma.waitlistEntry.findMany({
+      where,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        wantsPromotions: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    return this.paginate(entries, limit);
+  }
+
+  async listSupportInquiries(query: AdminListQueryDto): Promise<unknown> {
+    const limit = query.limit;
+    const where = query.status ? { status: query.status } : {};
+    const inquiries = await this.prisma.supportInquiry.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        subject: true,
+        message: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    return this.paginate(inquiries, limit);
+  }
+
   async listFees(): Promise<unknown> {
     return this.prisma.feeDefinition.findMany({
       orderBy: [{ code: 'asc' }, { version: 'desc' }],
