@@ -4,6 +4,13 @@
 
 ### Added
 
+- Permission-gated admin read API under `/api/v1/admin`: platform overview KPIs, paginated
+  user/Ajo-group/Akawo/Food-Ajo/bill-payment/ledger/KYC/coordinator listings, user and group detail,
+  fee definitions, and platform settings.
+- Deterministic admin demo seed (users, profiles, KYC, wallets, Ajo groups/cycles, Akawo goals,
+  Food Ajo programmes, bill payments, ledger transactions, fees, roles, brand configuration)
+  that is idempotent against the existing development seed.
+
 - Official Brevo SDK integration for transactional email and SMS, including persisted delivery
   results, welcome/auth/security/product templates, and welcome delivery after account activation.
 - LAN-ready local backend/mobile environment configuration and interactive API documentation at

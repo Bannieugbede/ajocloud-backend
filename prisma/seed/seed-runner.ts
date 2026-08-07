@@ -20,6 +20,7 @@ import {
   UserStatus,
 } from '../../generated/prisma/enums.js';
 import { verificationCodeHash } from '../../src/modules/auth/domain/verification-policy.js';
+import { seedAdminDemo } from './seeders/admin-demo.js';
 
 const PERMISSIONS = [
   'users.read',
@@ -412,6 +413,8 @@ export async function runSeed(): Promise<void> {
         dueAt: new Date('2026-08-15T09:00:00Z'),
       },
     });
+
+    await seedAdminDemo(prisma);
   } finally {
     await prisma.$disconnect();
   }

@@ -24,6 +24,7 @@ import { BillPaymentsModule } from './modules/bill-payments/bill-payments.module
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
 import { AkawoModule } from './modules/akawo/akawo.module.js';
+import { AdminModule } from './modules/admin/admin.module.js';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AkawoModule } from './modules/akawo/akawo.module.js';
     NotificationsModule,
     FoodAjoModule,
     AkawoModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

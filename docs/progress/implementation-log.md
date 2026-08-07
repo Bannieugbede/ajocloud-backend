@@ -1,5 +1,20 @@
 # Implementation log
 
+## 2026-08-07 — Admin read API and demo seed
+
+- Added an `AdminModule` exposing read-only, permission-gated endpoints under `/api/v1/admin` to
+  power the web admin dashboard: overview KPIs (total users, active groups, 30-day user growth,
+  posted ledger volume, collected fees), paginated lists for users, Ajo groups, Akawo goals,
+  Food Ajo programmes, bill payments, ledger transactions, KYC profiles, and coordinator
+  applications, plus user/group detail, fee definitions, and platform settings.
+- Endpoints reuse the existing `AccessTokenGuard` and `PermissionsGuard` with scoped permissions
+  (`users.read`, `ajo.manage`, `kyc.review`, `bill-payments.reconcile`, `fees.manage`, `audit.read`).
+- Added an idempotent `admin-demo` seeder that creates a realistic admin persona plus members,
+  verified KYC profiles, wallets with opening balances, locked Ajo groups with cycles, Akawo goals,
+  Food Ajo programmes, bill payments, fee definitions, roles, and brand configuration.
+- Validation: `bun run check` passed with 84 unit tests across 25 suites and a successful build;
+  the admin seed executed cleanly against the local PostgreSQL database and is repeatable.
+
 ## 2026-07-17 — Email-only account verification
 
 - Replaced the two-stage phone/email registration flow with one email challenge created during

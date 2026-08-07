@@ -1,7 +1,7 @@
 # Current status
 
-- Last updated: 2026-07-17
-- Current phase: Financial-core hardening plus staged Traditional Ajo, Food Coordinator, and Bill Payment delivery
+- Last updated: 2026-08-07
+- Current phase: Financial-core hardening plus staged Traditional Ajo, Food Coordinator, and Bill Payment delivery, with an admin read API layer serving the web admin dashboard
 
 ## Complete
 
@@ -17,6 +17,12 @@ public brand configuration.
 Approved-coordinator Food Ajo programme creation/reads; Akawo flexible/target goal creation,
 owner-scoped progress, and paginated contribution statements. Owner-scoped wallet balance/activity
 reads and Akawo future schedule creation are also implemented.
+
+An admin read API layer (permission-gated under `/api/v1/admin`) backs the web admin dashboard:
+platform overview KPIs (users, active groups, 30-day ledger volume and fee collections), paginated
+user/group/goal/Food Ajo/bill-payment/ledger/KYC/coordinator listings, per-user and per-group detail,
+versioned fee definitions, and platform settings (brand configuration, roles, fee count). A
+deterministic admin demo seed populates all of these surfaces locally.
 
 ## In progress
 
