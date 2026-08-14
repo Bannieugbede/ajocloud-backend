@@ -1,0 +1,147 @@
+# Coolify deployment stack for the Ajo Cloud API.
+#
+# Set every value in Coolify's environment editor (Configuration -> Environment
+# Variables). Nothing here is hard-coded to a domain so the same file works for
+# staging and production.
+#
+# Required at minimum:
+#   API_DOMAIN, POSTGRES_PASSWORD, RABBITMQ_PASSWORD,
+#   JWT_ACCESS_SECRET, TOKEN_PEPPER, CORS_ORIGINS
+#
+# Local dev stack (postgres/redis/rabbitmq only) lives in compose.yaml.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      # Coolify reads this label-free variable to route the domain + issue TLS.
+      SERVICE_FQDN_API: ${API_DOMAIN}
+      NODE_ENV: production
+      APP_NAME: ${APP_NAME:-Ajo Cloud API}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      HOST: 0.0.0.0
+      PORT: ${PORT:-3000}
+      API_PREFIX: ${API_PREFIX:-api}
+      # Comma-separated list of allowed browser origins, e.g. https://ajo.example.com
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ajocloud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajocloud}?schema=public
+      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-ajocloud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajocloud}?schema=public
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      TOKEN_PEPPER: ${TOKEN_PEPPER}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
+      IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
+
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-NGN}
+      APPLICATION_TIMEZONE: ${APPLICATION_TIMEZONE:-Africa/Lagos}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      BILL_PAYMENT_PROVIDER: ${BILL_PAYMENT_PROVIDER:-mock}
+      KYC_PROVIDER: ${KYC_PROVIDER:-mock}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      SMS_PROVIDER: ${SMS_PROVIDER:-mock}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-mock}
+
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
+      FLUTTERWAVE_SECRET_KEY: ${FLUTTERWAVE_SECRET_KEY:-}
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
+      DOJAH_BASE_URL: ${DOJAH_BASE_URL:-}
+      DOJAH_APP_ID: ${DOJAH_APP_ID:-}
+      DOJAH_SECRET_KEY: ${DOJAH_SECRET_KEY:-}
+
+      BREVO_BASE_URL: ${BREVO_BASE_URL:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-}
+      BREVO_SMS_SENDER: ${BREVO_SMS_SENDER:-}
+      SMTP_URL: ${SMTP_URL:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      PUSH_API_KEY: ${PUSH_API_KEY:-}
+
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      ERROR_MONITORING_DSN: ${ERROR_MONITORING_DSN:-}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/'+(process.env.API_PREFIX||'api')+'/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ajocloud}
+      POSTGRES_USER: ${POSTGRES_USER:-ajocloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-ajocloud} -d ${POSTGRES_DB:-ajocloud}
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ajocloud}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:

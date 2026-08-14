@@ -15,6 +15,10 @@ WORKDIR /app
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
+# Schema + migrations + prisma config so `prisma migrate deploy` can run in this
+# container (Coolify pre-deploy command).
+COPY --from=build --chown=node:node /app/prisma ./prisma
+COPY --from=build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 USER node
 EXPOSE 3000
 CMD ["node", "dist/src/main.js"]
