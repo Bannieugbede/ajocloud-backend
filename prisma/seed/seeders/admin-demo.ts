@@ -758,40 +758,60 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
     });
   }
 
-  // Ensure a LOCKED group has a schedule version + a couple of cycles so the group page is rich
-  const lockedGroup = await prisma.ajoGroup.findUniqueOrThrow({
-    where: { id: '10000000-0000-4000-8000-000000000011' },
+  // Give every running group a full cycle schedule so the dashboard's group
+  // progress panel has real completed/total counts to render.
+  await seedCycles(prisma, '10000000-0000-4000-8000-000000000011', 12, 4);
+  await seedCycles(prisma, '10000000-0000-4000-8000-000000000012', 12, 2);
+  await seedCycles(prisma, '10000000-0000-4000-8000-000000000013', 10, 7);
+}
+
+/**
+ * Creates `total` cycles for a group, with the first `completed` marked done
+ * and the next one open. Also records `numberOfCycles` on the group so the
+ * admin API can report progress without counting rows.
+ */
+async function seedCycles(
+  prisma: PrismaClient,
+  groupId: string,
+  total: number,
+  completed: number,
+): Promise<void> {
+  const group = await prisma.ajoGroup.findUnique({ where: { id: groupId } });
+  if (!group) return;
+  await prisma.ajoGroup.update({
+    where: { id: groupId },
+    data: {
+      numberOfCycles: total,
+      scheduleVersion: Math.max(group.scheduleVersion, 1),
+      ...(group.lockedAt ? {} : { lockedAt: new Date('2026-07-25T00:00:00Z') }),
+    },
   });
-  if (lockedGroup.scheduleVersion === 0) {
-    await prisma.ajoGroup.update({
-      where: { id: lockedGroup.id },
-      data: { scheduleVersion: 1, lockedAt: new Date('2026-07-25T00:00:00Z') },
+  const cycleBase = new Date('2026-08-01T00:00:00Z');
+  const dayMs = 24 * 60 * 60 * 1000;
+  for (let sequence = 1; sequence <= total; sequence += 1) {
+    const dueDate = new Date(cycleBase.getTime() + (sequence - 1) * 28 * dayMs);
+    const status =
+      sequence <= completed
+        ? AjoCycleStatus.COMPLETED
+        : sequence === completed + 1
+          ? AjoCycleStatus.OPEN
+          : AjoCycleStatus.PENDING;
+    await prisma.ajoCycle.upsert({
+      where: { groupId_sequence: { groupId, sequence } },
+      update: { status },
+      create: {
+        groupId,
+        sequence,
+        status,
+        contributionDueAt: dueDate,
+        contributionOpensAt: new Date(dueDate.getTime() - dayMs),
+        contributionClosesAt: new Date(dueDate.getTime() + 2 * dayMs),
+        graceEndsAt: new Date(dueDate.getTime() + 3 * dayMs),
+        payoutEligibilityCutoffAt: new Date(dueDate.getTime() + 3 * dayMs),
+        payoutDueAt: new Date(dueDate.getTime() + 4 * dayMs),
+        payoutProcessingEndsAt: new Date(dueDate.getTime() + 5 * dayMs),
+      },
     });
-    const cycleBase = new Date('2026-08-01T00:00:00Z');
-    for (const cycle of [1, 2, 3]) {
-      const dueDate = new Date(cycleBase.getTime() + (cycle - 1) * 28 * 24 * 60 * 60 * 1000);
-      await prisma.ajoCycle.upsert({
-        where: { groupId_sequence: { groupId: lockedGroup.id, sequence: cycle } },
-        update: {},
-        create: {
-          groupId: lockedGroup.id,
-          sequence: cycle,
-          status:
-            cycle === 1
-              ? AjoCycleStatus.COMPLETED
-              : cycle === 2
-                ? AjoCycleStatus.OPEN
-                : AjoCycleStatus.PENDING,
-          contributionDueAt: dueDate,
-          contributionOpensAt: new Date(dueDate.getTime() - 24 * 60 * 60 * 1000),
-          contributionClosesAt: new Date(dueDate.getTime() + 48 * 60 * 60 * 1000),
-          graceEndsAt: new Date(dueDate.getTime() + 72 * 60 * 60 * 1000),
-          payoutEligibilityCutoffAt: new Date(dueDate.getTime() + 72 * 60 * 60 * 1000),
-          payoutDueAt: new Date(dueDate.getTime() + 96 * 60 * 60 * 1000),
-          payoutProcessingEndsAt: new Date(dueDate.getTime() + 120 * 60 * 60 * 1000),
-        },
-      });
-    }
   }
 }
 

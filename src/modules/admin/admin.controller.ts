@@ -1,6 +1,8 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { PermissionsGuard } from '../permissions/permissions.guard.js';
 import { AdminService } from './admin.service.js';
@@ -17,6 +19,23 @@ export class AdminController {
   @RequirePermissions('audit.read')
   overview() {
     return this.admin.overview();
+  }
+
+  @Get('overview/volume-series')
+  @RequirePermissions('audit.read')
+  volumeSeries() {
+    return this.admin.volumeSeries();
+  }
+
+  @Get('overview/active-groups')
+  @RequirePermissions('audit.read')
+  activeGroups() {
+    return this.admin.activeGroups();
+  }
+
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return this.admin.currentUser(user.userId, user.permissions);
   }
 
   @Get('users')

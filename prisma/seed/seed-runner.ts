@@ -21,6 +21,7 @@ import {
 } from '../../generated/prisma/enums.js';
 import { verificationCodeHash } from '../../src/modules/auth/domain/verification-policy.js';
 import { seedAdminDemo } from './seeders/admin-demo.js';
+import { seedDashboardActivity } from './seeders/dashboard-activity.js';
 
 const PERMISSIONS = [
   'users.read',
@@ -107,6 +108,37 @@ export async function runSeed(): Promise<void> {
         wallets: { create: { currency: 'NGN' } },
       },
     });
+
+    // A real, reachable console operator so passwordless sign-in can be used
+    // locally with an inbox that actually receives the code. Override with
+    // SEED_ADMIN_EMAIL / SEED_ADMIN_FIRST_NAME / SEED_ADMIN_LAST_NAME.
+    const operatorEmail = (process.env.SEED_ADMIN_EMAIL ?? 'joshuahumphrey579@gmail.com')
+      .trim()
+      .toLowerCase();
+    const operator = await prisma.user.upsert({
+      where: { email: operatorEmail },
+      update: { status: UserStatus.ACTIVE, emailVerifiedAt: new Date('2026-01-01T00:00:00Z') },
+      create: {
+        email: operatorEmail,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        profile: {
+          create: {
+            firstName: process.env.SEED_ADMIN_FIRST_NAME ?? 'Joshua',
+            lastName: process.env.SEED_ADMIN_LAST_NAME ?? 'Humphrey',
+          },
+        },
+        credential: { create: { passwordHash } },
+        wallets: { create: { currency: 'NGN' } },
+      },
+    });
+    for (const roleName of ['SUPER_ADMIN', 'PLATFORM_ADMIN']) {
+      const roleId = required(roles, roleName);
+      const assignment = await prisma.userRole.findFirst({
+        where: { userId: operator.id, roleId, organisationId: null, groupId: null },
+      });
+      if (!assignment) await prisma.userRole.create({ data: { userId: operator.id, roleId } });
+    }
 
     const tokenPepper = process.env.TOKEN_PEPPER;
     if (!tokenPepper) throw new Error('TOKEN_PEPPER is required for verification seed data');
@@ -415,6 +447,7 @@ export async function runSeed(): Promise<void> {
     });
 
     await seedAdminDemo(prisma);
+    await seedDashboardActivity(prisma);
   } finally {
     await prisma.$disconnect();
   }

@@ -364,6 +364,14 @@ export class AuthService {
     await this.revokeSessions({ userId }, 'user_logout_all');
   }
 
+  /**
+   * Issues a session for a user whose identity has already been established by
+   * another factor (e.g. a redeemed one-time sign-in code).
+   */
+  createPasswordlessSession(userId: string, context: ClientContext): Promise<TokenPair> {
+    return this.createSession(userId, context);
+  }
+
   private async createSession(userId: string, context: ClientContext): Promise<TokenPair> {
     const rawToken = randomBytes(48).toString('base64url');
     const tokenHash = this.digest(rawToken);

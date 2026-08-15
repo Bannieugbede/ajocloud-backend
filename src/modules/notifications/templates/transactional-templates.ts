@@ -1,5 +1,6 @@
 export type EmailTemplateKey =
   | 'account-verification-email'
+  | 'sign-in-code'
   | 'welcome'
   | 'password-reset'
   | 'password-changed'
@@ -39,6 +40,18 @@ const emailDefinitions: Record<EmailTemplateKey, EmailDefinition> = {
       `<div style="font-size:32px;font-weight:700;letter-spacing:8px;color:#0D47A1;margin:24px 0">${escapeHtml(code)}</div>
        <p style="margin:0 0 16px">This code expires in ${escapeHtml(required(variables, 'expiresMinutes'))} minutes. Never share it with anyone.</p>`,
       `Your Ajo Cloud verification code is ${code}. It expires in ${required(variables, 'expiresMinutes')} minutes. Never share this code.`,
+    );
+  },
+  'sign-in-code': (variables) => {
+    const code = required(variables, 'code');
+    return email(
+      'Your Ajo Cloud sign-in code',
+      'Your Ajo Cloud sign-in code',
+      'Use this code to sign in to the Ajo Cloud admin console:',
+      `<div style="font-size:32px;font-weight:700;letter-spacing:8px;color:#0D47A1;margin:24px 0">${escapeHtml(code)}</div>
+       <p style="margin:0 0 16px">This code expires in ${escapeHtml(required(variables, 'expiresMinutes'))} minutes. Never share it with anyone.</p>
+       <p style="margin:0">If you did not try to sign in, you can safely ignore this email.</p>`,
+      `Your Ajo Cloud sign-in code is ${code}. It expires in ${required(variables, 'expiresMinutes')} minutes. Never share this code. If you did not try to sign in, ignore this email.`,
     );
   },
   welcome: (variables) =>

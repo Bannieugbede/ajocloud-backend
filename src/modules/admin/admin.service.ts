@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  AjoCycleStatus,
   AjoGroupStatus,
   BillPaymentStatus,
   FeeAssessmentStatus,
@@ -91,6 +92,130 @@ export class AdminService {
         walletId:
           transaction.entries.find((entry) => entry.account.walletId)?.account.walletId ?? null,
       })),
+    };
+  }
+
+  /**
+   * The signed-in administrator, for the console topbar and access checks.
+   */
+  async currentUser(userId: string, permissions: readonly string[]): Promise<unknown> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        roleAssignments: { select: { role: { select: { name: true } } } },
+      },
+    });
+    if (!user) throw new NotFoundException('User was not found');
+    return {
+      ...user,
+      roles: user.roleAssignments.map((assignment) => assignment.role.name),
+      permissions,
+    };
+  }
+
+  /**
+   * Posted credit volume bucketed into equal windows ending today, for the
+   * dashboard volume chart. `weeks` covers the trailing period.
+   */
+  async volumeSeries(weeks = 10): Promise<unknown> {
+    const bucketMs = 7 * 24 * 60 * 60 * 1_000;
+    const now = new Date();
+    const start = new Date(now.getTime() - weeks * bucketMs);
+
+    const entries = await this.prisma.ledgerEntry.findMany({
+      where: {
+        direction: LedgerEntryDirection.CREDIT,
+        transaction: {
+          status: LedgerTransactionStatus.POSTED,
+          postedAt: { gte: start },
+        },
+      },
+      select: { amountMinor: true, transaction: { select: { postedAt: true } } },
+    });
+
+    const buckets = Array.from({ length: weeks }, (_, index) => ({
+      startsAt: new Date(start.getTime() + index * bucketMs),
+      totalMinor: 0n,
+    }));
+    for (const entry of entries) {
+      const postedAt = entry.transaction.postedAt;
+      if (!postedAt) continue;
+      const index = Math.min(
+        buckets.length - 1,
+        Math.floor((postedAt.getTime() - start.getTime()) / bucketMs),
+      );
+      if (index < 0) continue;
+      buckets[index]!.totalMinor += entry.amountMinor;
+    }
+
+    const total = buckets.reduce((sum, bucket) => sum + bucket.totalMinor, 0n);
+    const half = Math.floor(buckets.length / 2);
+    const previous = buckets.slice(0, half).reduce((sum, b) => sum + b.totalMinor, 0n);
+    const recent = buckets.slice(half).reduce((sum, b) => sum + b.totalMinor, 0n);
+
+    return {
+      currency: 'NGN',
+      totalMinor: total.toString(),
+      // Percentage change of the most recent half against the one before it.
+      changePercent:
+        previous === 0n ? null : Number(((recent - previous) * 10_000n) / previous) / 100,
+      buckets: buckets.map((bucket) => ({
+        startsAt: bucket.startsAt.toISOString(),
+        totalMinor: bucket.totalMinor.toString(),
+      })),
+    };
+  }
+
+  /**
+   * Active groups with cycle progress, for the dashboard side panel.
+   */
+  async activeGroups(limit = 5): Promise<unknown> {
+    const groups = await this.prisma.ajoGroup.findMany({
+      where: { status: { in: ACTIVE_GROUP_STATUSES }, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        currency: true,
+        baseContributionMinor: true,
+        numberOfCycles: true,
+        _count: { select: { members: true, cycles: true } },
+        cycles: {
+          orderBy: { sequence: 'asc' },
+          select: { sequence: true, status: true },
+        },
+      },
+    });
+
+    return {
+      items: groups.map((group) => {
+        const completed = group.cycles.filter(
+          (cycle) => cycle.status === AjoCycleStatus.COMPLETED,
+        ).length;
+        const totalCycles = group.numberOfCycles || group._count.cycles || 0;
+        const inProgress = group.cycles.find(
+          (cycle) =>
+            cycle.status === AjoCycleStatus.OPEN || cycle.status === AjoCycleStatus.PROCESSING,
+        );
+        const currentCycle = inProgress?.sequence ?? Math.min(completed + 1, totalCycles || 1);
+        return {
+          id: group.id,
+          name: group.name,
+          status: group.status,
+          currency: group.currency,
+          members: group._count.members,
+          // Pot for one full cycle: every member contributes the base amount.
+          potMinor: (group.baseContributionMinor * BigInt(group._count.members)).toString(),
+          currentCycle,
+          totalCycles,
+          progressPercent: totalCycles > 0 ? Math.round((completed / totalCycles) * 100) : 0,
+        };
+      }),
     };
   }
 

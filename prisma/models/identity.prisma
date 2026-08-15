@@ -30,6 +30,7 @@ model AccountVerificationChallenge {
   id                String                     @id @default(uuid()) @db.Uuid
   userId            String                     @db.Uuid
   channel           AccountVerificationChannel
+  purpose           VerificationPurpose        @default(ACCOUNT_VERIFICATION)
   codeHash          String                     @db.VarChar(128)
   destinationMasked String                     @db.VarChar(191)
   expiresAt         DateTime                   @db.Timestamptz(6)
@@ -43,6 +44,7 @@ model AccountVerificationChallenge {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, channel, createdAt])
+  @@index([userId, purpose, createdAt])
   @@index([expiresAt])
   @@map("account_verification_challenges")
 }

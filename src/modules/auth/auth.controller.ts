@@ -5,6 +5,8 @@ import type { FastifyRequest } from 'fastify';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AuthService } from './auth.service.js';
+import { PasswordlessService } from './passwordless.service.js';
+import { RequestOtpDto, ResendOtpDto, VerifyOtpDto } from './dto/otp.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -14,7 +16,31 @@ import { ResendVerificationDto, VerifyAccountDto } from './dto/verify-account.dt
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwordless: PasswordlessService,
+  ) {}
+
+  @Post('otp/request')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  requestOtp(@Body() dto: RequestOtpDto) {
+    return this.passwordless.requestCode(dto.email);
+  }
+
+  @Post('otp/resend')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.passwordless.resendCode(dto.challengeId);
+  }
+
+  @Post('otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verifyOtp(@Body() dto: VerifyOtpDto, @Req() request: FastifyRequest) {
+    return this.passwordless.verifyCode(dto.challengeId, dto.code, this.context(request));
+  }
 
   @Post('register')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

@@ -1,17 +1,4 @@
-# Coolify deployment stack for the Ajo Cloud API.
-#
-# Postgres and Redis are provisioned separately as Coolify resources; only their
-# connection strings are consumed here. RabbitMQ ships with this stack because
-# the API is its sole consumer.
-#
-# Set every value in Coolify (Configuration -> Environment Variables). Nothing is
-# hard-coded to a domain, so the same file serves staging and production.
-#
-# Required:
-#   API_DOMAIN, DATABASE_URL, REDIS_URL, RABBITMQ_PASSWORD,
-#   JWT_ACCESS_SECRET, TOKEN_PEPPER, CORS_ORIGINS
-#
-# The local dev stack lives in compose.yaml.
+
 
 services:
   api:
