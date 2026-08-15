@@ -21,6 +21,16 @@ const variables = {
   goalName: 'Emergency Fund',
   progress: '75%',
   serviceName: 'Electricity',
+  reason: 'Document photo was unreadable',
+  balance: 'NGN 25,000',
+  destination: 'GTBank ****1234',
+  location: 'Ikeja Distribution Centre',
+  saved: 'NGN 75,000',
+  target: 'NGN 100,000',
+  inviterName: 'Ada',
+  inviteUrl: 'https://example.com/invite?token=safe',
+  frequency: 'Monthly',
+  paidAt: '18 July 2026 at 09:30 WAT',
 };
 
 describe('transactional templates', () => {
@@ -42,6 +52,23 @@ describe('transactional templates', () => {
     const rendered = renderEmailTemplate('welcome', variables);
     expect(rendered.html).toContain('&lt;Joshua&gt;');
     expect(rendered.html).not.toContain('<Joshua>');
+  });
+
+  it('escapes user-controlled values rendered into detail rows', () => {
+    const rendered = renderEmailTemplate('kyc-rejected', {
+      ...variables,
+      reason: '<img src=x onerror=alert(1)>',
+    });
+    expect(rendered.html).not.toContain('<img src=x');
+    expect(rendered.html).toContain('&lt;img src=x');
+  });
+
+  it('clamps a malformed progress value instead of overflowing the bar', () => {
+    const rendered = renderEmailTemplate('akawo-goal-progress', {
+      ...variables,
+      progress: '900%',
+    });
+    expect(rendered.html).toContain('width:100%');
   });
 
   it('rejects missing required variables', () => {
