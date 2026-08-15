@@ -1,14 +1,17 @@
 # Coolify deployment stack for the Ajo Cloud API.
 #
-# Set every value in Coolify's environment editor (Configuration -> Environment
-# Variables). Nothing here is hard-coded to a domain so the same file works for
-# staging and production.
+# Postgres and Redis are provisioned separately as Coolify resources; only their
+# connection strings are consumed here. RabbitMQ ships with this stack because
+# the API is its sole consumer.
 #
-# Required at minimum:
-#   API_DOMAIN, POSTGRES_PASSWORD, RABBITMQ_PASSWORD,
+# Set every value in Coolify (Configuration -> Environment Variables). Nothing is
+# hard-coded to a domain, so the same file serves staging and production.
+#
+# Required:
+#   API_DOMAIN, DATABASE_URL, REDIS_URL, RABBITMQ_PASSWORD,
 #   JWT_ACCESS_SECRET, TOKEN_PEPPER, CORS_ORIGINS
 #
-# Local dev stack (postgres/redis/rabbitmq only) lives in compose.yaml.
+# The local dev stack lives in compose.yaml.
 
 services:
   api:
@@ -17,14 +20,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     environment:
-      # Coolify reads this label-free variable to route the domain + issue TLS.
+      # Coolify reads this to route the domain and issue TLS.
       SERVICE_FQDN_API: ${API_DOMAIN}
       NODE_ENV: production
       APP_NAME: ${APP_NAME:-Ajo Cloud API}
@@ -32,13 +31,14 @@ services:
       HOST: 0.0.0.0
       PORT: ${PORT:-3000}
       API_PREFIX: ${API_PREFIX:-api}
-      # Comma-separated list of allowed browser origins, e.g. https://ajo.example.com
+      # Comma-separated browser origins, e.g. https://ajo.example.com
       CORS_ORIGINS: ${CORS_ORIGINS}
       LOG_LEVEL: ${LOG_LEVEL:-info}
 
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ajocloud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajocloud}?schema=public
-      DIRECT_DATABASE_URL: postgresql://${POSTGRES_USER:-ajocloud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajocloud}?schema=public
-      REDIS_URL: redis://redis:6379/0
+      # Point these at the Coolify-managed Postgres and Redis resources. Use the
+      # internal hostnames Coolify assigns so traffic never leaves the network.
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD}@rabbitmq:5672
 
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
@@ -56,6 +56,7 @@ services:
       KYC_PROVIDER: ${KYC_PROVIDER:-mock}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
       SMS_PROVIDER: ${SMS_PROVIDER:-mock}
+      # Expo push needs no server key for tokens Expo itself issued.
       PUSH_PROVIDER: ${PUSH_PROVIDER:-mock}
 
       AWS_REGION: ${AWS_REGION:-}
@@ -75,14 +76,10 @@ services:
       DOJAH_APP_ID: ${DOJAH_APP_ID:-}
       DOJAH_SECRET_KEY: ${DOJAH_SECRET_KEY:-}
 
-      BREVO_BASE_URL: ${BREVO_BASE_URL:-}
-      BREVO_API_KEY: ${BREVO_API_KEY:-}
-      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
-      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-}
-      BREVO_SMS_SENDER: ${BREVO_SMS_SENDER:-}
-      SMTP_URL: ${SMTP_URL:-}
-      SMS_API_KEY: ${SMS_API_KEY:-}
-      PUSH_API_KEY: ${PUSH_API_KEY:-}
+      RESEND_BASE_URL: ${RESEND_BASE_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_SENDER_EMAIL: ${RESEND_SENDER_EMAIL:-}
+      RESEND_SENDER_NAME: ${RESEND_SENDER_NAME:-Ajo Cloud}
 
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       ERROR_MONITORING_DSN: ${ERROR_MONITORING_DSN:-}
@@ -95,36 +92,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
-
-  postgres:
-    image: postgres:18-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ajocloud}
-      POSTGRES_USER: ${POSTGRES_USER:-ajocloud}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - pg_isready -U ${POSTGRES_USER:-ajocloud} -d ${POSTGRES_DB:-ajocloud}
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
-  redis:
-    image: redis:8-alpine
-    restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   rabbitmq:
     image: rabbitmq:4-alpine
@@ -142,6 +109,4 @@ services:
       start_period: 30s
 
 volumes:
-  postgres-data:
-  redis-data:
   rabbitmq-data:

@@ -19,11 +19,8 @@ describe('environment validation', () => {
   });
 
   it('requires provider credentials only when that provider is selected', () => {
-    expect(() => validateEnvironment({ ...valid, EMAIL_PROVIDER: 'brevo' })).toThrow(
-      'BREVO_API_KEY is required for Brevo',
-    );
-    expect(() => validateEnvironment({ ...valid, SMS_PROVIDER: 'brevo' })).toThrow(
-      'BREVO_API_KEY is required for Brevo SMS',
+    expect(() => validateEnvironment({ ...valid, EMAIL_PROVIDER: 'resend' })).toThrow(
+      'RESEND_API_KEY is required for Resend',
     );
     expect(() => validateEnvironment({ ...valid, BILL_PAYMENT_PROVIDER: 'monnify' })).toThrow(
       'MONNIFY_API_KEY is required for Monnify',
@@ -37,15 +34,13 @@ describe('environment validation', () => {
     expect(
       validateEnvironment({
         ...valid,
-        BREVO_BASE_URL: '',
-        BREVO_SENDER_EMAIL: '',
-        BREVO_SMS_SENDER: '',
+        RESEND_BASE_URL: '',
+        RESEND_SENDER_EMAIL: '',
         MONNIFY_BASE_URL: '',
       }),
     ).toMatchObject({
-      BREVO_BASE_URL: '',
-      BREVO_SENDER_EMAIL: '',
-      BREVO_SMS_SENDER: '',
+      RESEND_BASE_URL: '',
+      RESEND_SENDER_EMAIL: '',
       MONNIFY_BASE_URL: '',
     });
   });

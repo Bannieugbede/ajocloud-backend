@@ -17,7 +17,7 @@ an HMAC-SHA256 digest of refresh material is stored.
 
 Refresh tokens rotate once. Reuse or a token-family mismatch marks the session compromised and revokes outstanding refresh records. Access-token validation checks signature, token type, active unexpired database session, and active user on every protected request. Generic login failures reduce account enumeration. Auth endpoints have tighter rate limits.
 
-The selected email adapter sends account verification and the welcome message through Brevo
+The selected email adapter sends account verification and the welcome message through Resend
 transactional email. Every attempt is persisted with a deterministic dedupe key and provider message
 ID. Raw codes exist only during rendering/provider dispatch and are never stored in notification
 payloads or logs. Password-reset templates exist, but password recovery, MFA, and device-management

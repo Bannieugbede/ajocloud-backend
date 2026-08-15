@@ -14,7 +14,7 @@ describe('VerificationDeliveryService', () => {
   it('routes account verification through the email template', async () => {
     const sendEmail = jest.fn().mockResolvedValue({
       status: 'SENT',
-      providerReference: '<message@brevo>',
+      providerReference: '<message@resend>',
     });
     const notifications = { sendEmail } as unknown as TransactionalNotificationService;
     const service = new VerificationDeliveryService(notifications);

@@ -6,6 +6,7 @@ BullMQ is reserved for low-risk application jobs such as notifications, reminder
 
 Notification events cover account/security, Ajo, Food Ajo, Akawo, Bill Payment, and referral milestones. Template versions, user/channel preferences, quiet hours, deterministic dedupe keys, attempts, provider references, and terminal delivery states are persisted. Financial state never depends on successful notification delivery.
 
-Transactional email and SMS currently use Brevo's API through the official Node SDK. The generic
-provider interfaces remain replaceable, and console/mock providers remain available for tests and
-offline development. See [notifications](notifications.md) for template and delivery details.
+Transactional email currently uses the Resend REST API; no hosted SMS provider is wired yet. The
+generic provider interfaces remain replaceable, and console/mock providers remain available for
+tests and offline development. See [notifications](notifications.md) for template and delivery
+details.

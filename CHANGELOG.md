@@ -45,6 +45,14 @@
 
 ### Changed
 
+- Transactional email now goes through Resend over its REST API, replacing the Brevo SDK. The
+  `@getbrevo/brevo` dependency was removed; configure `EMAIL_PROVIDER=resend` with `RESEND_API_KEY`,
+  `RESEND_SENDER_EMAIL`, and `RESEND_SENDER_NAME`.
+- Brevo also provided SMS, so `SMS_PROVIDER` now accepts `mock` only. The `SmsProvider` boundary and
+  the `SMS` notification channel are unchanged, so a replacement needs no schema migration.
+- `PUSH_PROVIDER` accepts `mock` or `expo`; `PUSH_API_KEY` was removed because Expo needs no server
+  key for tokens it issued.
+- `DIRECT_DATABASE_URL` and `SMTP_URL` were removed; a single `DATABASE_URL` now configures Prisma.
 - Account registration and activation now use one email verification challenge; phone collection,
   phone OTP delivery, and the public phone-verification endpoint were removed from the auth flow.
 - Development API logs now use readable, colorized Pino formatting while production and test logs

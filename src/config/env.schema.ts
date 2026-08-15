@@ -19,7 +19,6 @@ export const environmentSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     DATABASE_URL: z.url(),
-    DIRECT_DATABASE_URL: optionalUrl,
     REDIS_URL: z.url(),
     RABBITMQ_URL: z.url(),
     JWT_ACCESS_SECRET: z.string().min(32),
@@ -33,14 +32,16 @@ export const environmentSchema = z
     PAYMENT_PROVIDER: z.enum(['mock', 'paystack', 'flutterwave', 'monnify']).default('mock'),
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     KYC_PROVIDER: z.enum(['mock', 'monnify', 'dojah']).default('mock'),
-    EMAIL_PROVIDER: z.enum(['console', 'brevo']).default('console'),
+    EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
     DEFAULT_CURRENCY: z
       .string()
       .regex(/^[A-Z]{3}$/)
       .default('NGN'),
     APPLICATION_TIMEZONE: z.string().min(1).default('Africa/Lagos'),
-    SMS_PROVIDER: z.enum(['mock', 'brevo']).default('mock'),
-    PUSH_PROVIDER: z.string().default('mock'),
+    SMS_PROVIDER: z.enum(['mock']).default('mock'),
+    // Expo's push service accepts unauthenticated sends for tokens it issued, so
+    // no access token is required for the default setup.
+    PUSH_PROVIDER: z.enum(['mock', 'expo']).default('mock'),
     AWS_REGION: z.string().optional(),
     AWS_S3_BUCKET: z.string().optional(),
     AWS_ACCESS_KEY_ID: z.string().optional(),
@@ -56,39 +57,22 @@ export const environmentSchema = z
     DOJAH_BASE_URL: optionalUrl,
     DOJAH_APP_ID: z.string().optional(),
     DOJAH_SECRET_KEY: z.string().optional(),
-    BREVO_BASE_URL: optionalUrl,
-    BREVO_API_KEY: z.string().optional(),
-    BREVO_SENDER_EMAIL: optionalEmail,
-    BREVO_SENDER_NAME: z.string().optional(),
-    BREVO_SMS_SENDER: z
-      .union([z.string().regex(/^(?:[A-Za-z0-9]{1,11}|[0-9]{12,15})$/), z.literal('')])
-      .optional(),
-    SMTP_URL: optionalUrl,
-    SMS_API_KEY: z.string().optional(),
-    PUSH_API_KEY: z.string().optional(),
+    RESEND_BASE_URL: optionalUrl,
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_SENDER_EMAIL: optionalEmail,
+    RESEND_SENDER_NAME: z.string().optional(),
     OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
     ERROR_MONITORING_DSN: optionalUrl,
     SWAGGER_ENABLED: z.stringbool().default(true),
   })
   .superRefine((environment, context) => {
-    if (environment.EMAIL_PROVIDER === 'brevo') {
-      for (const key of ['BREVO_API_KEY', 'BREVO_SENDER_EMAIL'] as const) {
+    if (environment.EMAIL_PROVIDER === 'resend') {
+      for (const key of ['RESEND_API_KEY', 'RESEND_SENDER_EMAIL'] as const) {
         if (!environment[key]) {
           context.addIssue({
             code: 'custom',
             path: [key],
-            message: `${key} is required for Brevo`,
-          });
-        }
-      }
-    }
-    if (environment.SMS_PROVIDER === 'brevo') {
-      for (const key of ['BREVO_API_KEY', 'BREVO_SMS_SENDER'] as const) {
-        if (!environment[key]) {
-          context.addIssue({
-            code: 'custom',
-            path: [key],
-            message: `${key} is required for Brevo SMS`,
+            message: `${key} is required for Resend`,
           });
         }
       }

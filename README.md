@@ -9,7 +9,7 @@ Ajo Cloud is a modular-monolith backend for Traditional Ajo, Akawo savings, Food
 - TypeScript 5.9 in strict mode
 - Prisma ORM 7.8 with PostgreSQL adapter; PostgreSQL 18 locally
 - Redis 8, BullMQ 5, RabbitMQ 4
-- Brevo Node SDK 6 for transactional email and SMS
+- Resend REST API for transactional email
 - Pino JSON logging, Zod environment validation, Swagger/OpenAPI
 
 ## Prerequisites
@@ -29,9 +29,9 @@ ALLOW_SEED=true bun run prisma:seed
 
 Replace all local placeholder secrets before starting the API. Never use example values in a shared or production environment.
 
-To use Brevo, set `EMAIL_PROVIDER=brevo`, `SMS_PROVIDER=brevo`, `BREVO_API_KEY`, a verified
-`BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, and an approved `BREVO_SMS_SENDER`. SMTP relay
-credentials may be kept in `SMTP_URL`, but the application adapters use Brevo's authenticated API.
+To send real email, set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, a verified
+`RESEND_SENDER_EMAIL`, and `RESEND_SENDER_NAME`. Leave `EMAIL_PROVIDER=console` to log messages
+instead of sending them. No hosted SMS provider is wired yet, so `SMS_PROVIDER` accepts `mock` only.
 
 ## Running processes
 

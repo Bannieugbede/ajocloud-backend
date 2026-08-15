@@ -3,14 +3,17 @@
 ## Provider architecture
 
 Transactional delivery uses replaceable `EmailProvider` and `SmsProvider` boundaries. Development
-can select console/mock adapters. Brevo selection uses the official `@getbrevo/brevo` v6 client with
-a 15-second timeout and bounded retry behavior. Email and SMS both use the API key; `SMTP_URL` is
-retained as an operational relay configuration but is not the active application transport.
+can select console/mock adapters. Selecting `EMAIL_PROVIDER=resend` routes email through the Resend
+REST API over `fetch` with a 15-second timeout; the single `POST /emails` call does not justify an
+SDK dependency. Every send carries an `Idempotency-Key`, which Resend deduplicates for 24 hours.
 
-Required Brevo settings are `BREVO_API_KEY`, a verified `BREVO_SENDER_EMAIL`,
-`BREVO_SENDER_NAME`, and an approved `BREVO_SMS_SENDER`. The SMS Sender ID must satisfy Brevo's
-length/character rules and may require country-specific approval. Never expose these settings in a
-mobile/public environment.
+Required Resend settings are `RESEND_API_KEY`, a verified `RESEND_SENDER_EMAIL`, and
+`RESEND_SENDER_NAME`. `RESEND_BASE_URL` overrides the API host for testing only. Never expose these
+settings in a mobile/public environment.
+
+No hosted SMS provider is wired. `SMS_PROVIDER` accepts `mock` only, which logs instead of sending;
+the `SmsProvider` boundary and the `SMS` notification channel stay in place so a provider can be
+added without a schema change.
 
 ## Templates
 
@@ -22,8 +25,8 @@ The code-owned version-1 catalog currently contains:
 - Food Ajo distribution ready.
 - Akawo goal progress.
 - Bill Payment receipt.
-- SMS password reset template retained for the future recovery workflow; account verification is
-  email-only.
+- SMS password reset template retained for the future recovery workflow; it renders through the
+  mock adapter until an SMS provider is selected. Account verification is email-only.
 
 Templates provide responsive inline HTML and plain text, escape user-controlled HTML variables,
 and use the Ajo Cloud blue/teal brand. Password recovery and product-event templates are ready for
@@ -42,8 +45,8 @@ verified account/session.
 
 ## Remaining production work
 
-Before production, approve Brevo commercially and legally, verify the sender domain, approve SMS
-Sender IDs per target country, move credentials to a secret manager, configure balance/deliverability
-alerts, and implement authenticated replay-resistant delivery webhooks. Scheduled reminders,
+Before production, verify the sender domain in Resend (SPF/DKIM records), move credentials to a
+secret manager, configure deliverability alerts, and implement authenticated replay-resistant
+delivery webhooks. Selecting an SMS provider remains open work. Scheduled reminders,
 BullMQ retry/dead-letter processing, preference/quiet-hour enforcement, and remaining domain-event
 orchestration are still roadmap work.

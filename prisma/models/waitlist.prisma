@@ -3,15 +3,15 @@
 // validated strings rather than enums to keep the schema stable.
 
 model WaitlistEntry {
-  id              String    @id @default(uuid()) @db.Uuid
-  firstName       String    @db.VarChar(100)
-  lastName        String    @db.VarChar(100)
-  email           String    @db.VarChar(320)
-  phone           String    @db.VarChar(20)
-  wantsPromotions Boolean   @default(false)
-  status          String    @default("ACTIVE") @db.VarChar(20)
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  id              String   @id @default(uuid()) @db.Uuid
+  firstName       String   @db.VarChar(100)
+  lastName        String   @db.VarChar(100)
+  email           String   @db.VarChar(320)
+  phone           String   @db.VarChar(20)
+  wantsPromotions Boolean  @default(false)
+  status          String   @default("ACTIVE") @db.VarChar(20)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
 
   @@unique([email])
   @@index([status, createdAt])

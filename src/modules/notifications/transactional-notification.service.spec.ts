@@ -20,21 +20,21 @@ function setup() {
     $transaction: transaction,
   } as unknown as PrismaService;
   const emailSend = jest.fn().mockResolvedValue({
-    provider: 'brevo',
-    providerReference: '<message@brevo>',
+    provider: 'resend',
+    providerReference: '<message@resend>',
     accepted: true,
   });
   const emailProvider = {
-    name: 'brevo',
+    name: 'resend',
     send: emailSend,
   } as EmailProvider;
   const smsSend = jest.fn().mockResolvedValue({
-    provider: 'brevo',
+    provider: 'resend',
     providerReference: '12345',
     accepted: true,
   });
   const smsProvider = {
-    name: 'brevo',
+    name: 'resend',
     send: smsSend,
   } as SmsProvider;
   return {
@@ -62,7 +62,7 @@ describe('TransactionalNotificationService', () => {
         storedPayload: { destination: 'm***@example.com', challengeId: 'challenge-id' },
         dedupeKey: 'account-verification:challenge-id',
       }),
-    ).resolves.toEqual({ status: 'SENT', providerReference: '<message@brevo>' });
+    ).resolves.toEqual({ status: 'SENT', providerReference: '<message@resend>' });
 
     expect(emailSend).toHaveBeenCalledWith(
       expect.objectContaining({

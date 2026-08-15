@@ -11,9 +11,9 @@ Report vulnerabilities privately to the project security owner; do not open a pu
 - Authorization combines roles/permissions with organisation, group, user, and wallet ownership checks.
 - Financial commands use integer minor units, unique references, serializable boundaries where needed, immutable balanced ledger entries, reversals, and idempotency records.
 - Provider webhooks require adapter-level signature verification, replay-resistant provider event IDs, persistence before processing, and redacted logging. Real adapters remain blocked until reviewed.
-- Brevo API/SMTP credentials are secret-manager values. Transactional sends persist only safe
+- Resend API credentials are secret-manager values. Transactional sends persist only safe
   template metadata and provider message IDs; raw OTPs and provider responses are not persisted.
-  Brevo delivery webhooks remain disabled until an authenticated, replay-resistant intake contract
+  Resend delivery webhooks remain disabled until an authenticated, replay-resistant intake contract
   is implemented.
 - Bill payments reserve wallet funds atomically before provider dispatch. Timeouts and ambiguous provider results retain the reserve and enter reconciliation; only confirmed failures release it. Provider events are immutable and deduplicated.
 - KYC uses progressive tiers, provider boundaries, least-privilege review access, masked identifiers, and explicit retention policy. Raw BVN, NIN/vNIN, biometric material, and provider payloads are not persisted unless separately approved and encrypted.
