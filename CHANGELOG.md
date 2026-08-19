@@ -11,6 +11,41 @@
 
 ### Added
 
+- Tier 2 identity verification, settling steps g-i of the account-creation step form.
+  `GET /kyc/status` reports what remains, `PATCH /kyc/personal-details` collects date of birth,
+  gender, residential address, city, state, and occupation (refusing anyone under 18),
+  `POST /kyc/identity` verifies a BVN or NIN, `GET /kyc/banks` serves the provider bank list,
+  `POST /kyc/banks/inquire` resolves an account name, and `POST /kyc/bank-accounts` links the
+  account once the name has been confirmed. Provider and data policy are set by
+  [ADR-004](docs/adr/ADR-004-identity-verification-provider-and-data-policy.md).
+
+  **Dojah** is the identity provider. Selection stays behind `KYC_PROVIDER`; anything other than
+  `dojah` falls back to a mock that never reports a real-world identity as verified, so no
+  environment can mistake a development pass for a genuine check.
+
+  The raw BVN/NIN is **never persisted**. It is held for the life of one request, sent to the
+  provider over TLS, and discarded; only the masked value (`*******1234`), the pass/fail result,
+  the provider reference, and risk flags are written. Nothing — no log, audit payload, error
+  message, or thrown exception — carries the full number, and transport errors are caught and
+  replaced because the underlying error object can hold the request URL. Tests assert directly
+  that no persisted or audited payload contains the identifier.
+
+  Explicit consent is recorded as a `UserConsent` row before the provider is called, so there is
+  no window in which a number was sent without a stored record of permission. A name mismatch
+  against the profile raises a `NAME_MISMATCH` flag and routes the profile to review rather than
+  auto-rejecting: Nigerian names vary legitimately in ordering, spelling, and diacritics, and an
+  automatic reject on fuzzy comparison would exclude real users. Five failed checks per rolling
+  24 hours then refuses further attempts and opens a compliance review, which bounds using the
+  endpoint to enumerate identifiers.
+
+  Linked bank account numbers are stored masked plus an HMAC digest keyed on the deployment
+  pepper, so the same account is recognised across links without the number being recoverable
+  from a database copy. The account name comes from the bank's inquiry, never from user input.
+  New table: `linked_bank_accounts`; new columns on `user_profiles`; new `Gender` enum and
+  `IDENTITY_VERIFICATION` consent type.
+
+  Tier 3 (face match, liveness) remains unimplemented and needs a further ADR.
+
 - Transaction PIN. `GET /auth/transaction-pin` reports whether one is set and any active lockout,
   `POST /auth/transaction-pin` sets or replaces it, and `POST /auth/transaction-pin/verify` checks
   it. The PIN is hashed with Argon2id on the same parameters as passwords and is never returned in

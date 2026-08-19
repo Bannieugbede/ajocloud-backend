@@ -27,6 +27,7 @@ import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
 import { AkawoModule } from './modules/akawo/akawo.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
 import { EngagementModule } from './modules/engagement/engagement.module.js';
+import { KycModule } from './modules/kyc/kyc.module.js';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { EngagementModule } from './modules/engagement/engagement.module.js';
     AkawoModule,
     AdminModule,
     EngagementModule,
+    KycModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

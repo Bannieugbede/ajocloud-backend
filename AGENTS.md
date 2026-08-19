@@ -44,3 +44,20 @@ Use `bun run check` for non-destructive verification. Other verified commands ar
 - [ADR index](docs/adr/README.md), [open Ajo financial rules](docs/open-questions/ajo-financial-rules.md)
 - [Bill Payment](docs/bill-payments.md), [progressive KYC](docs/kyc.md), [Food Ajo](docs/food-ajo.md), [Akawo](docs/akawo.md), and [referrals](docs/referrals.md)
 - [Flexible Ajo questions](docs/open-questions/flexible-ajo-contribution-rules.md), [referral qualification](docs/open-questions/referral-qualification-rule.md), and [email provider selection](docs/open-questions/email-provider-selection.md)
+
+## Version control
+
+Commit every code change. Do not leave completed work uncommitted in the working
+tree: an uncommitted change is invisible to everyone else and is lost with the
+checkout.
+
+- Commit when a unit of work is complete and verification passes, not at the end
+  of a long session. Several focused commits beat one sprawling one.
+- Run the project's verification before committing. Do not commit a red tree; if
+  something is genuinely broken and must be recorded, say so in the message.
+- Write messages that state what changed and why. The diff already shows the
+  what, so the why is the part worth writing down.
+- Never commit secrets, credentials, `.env` files, tokens, or real identity or
+  financial data. Check the staged diff before committing.
+- Branch before committing when on the default branch, and push or open a pull
+  request only when the user asks.

@@ -27,6 +27,9 @@ enum VerificationPurpose {
 enum ConsentType {
   TERMS
   PRIVACY
+  /// Permission to send an identity number to the verification provider.
+  /// Required before any BVN/NIN check; see ADR-004.
+  IDENTITY_VERIFICATION
 }
 
 enum SessionStatus {
@@ -350,4 +353,11 @@ enum NotificationDeliveryStatus {
   FAILED
   RETRY_SCHEDULED
   SUPPRESSED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
 }

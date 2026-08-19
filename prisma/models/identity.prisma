@@ -23,6 +23,7 @@ model User {
   consents               UserConsent[]
   identities             UserIdentity[]
   transactionPin         TransactionPin?
+  bankAccounts           LinkedBankAccount[]
 
   @@index([status, createdAt])
   @@map("users")
@@ -96,6 +97,12 @@ model UserProfile {
   lastName    String    @db.VarChar(100)
   otherNames  String?   @db.VarChar(160)
   dateOfBirth DateTime? @db.Date
+  gender      Gender?
+  /// Residential address collected for Tier 2. Not an identity number: it is
+  /// ordinary profile data and is stored in the clear.
+  addressLine String?   @db.VarChar(200)
+  city        String?   @db.VarChar(100)
+  occupation  String?   @db.VarChar(120)
   country     String    @default("NG") @db.Char(2)
   state       String?   @db.VarChar(100)
   avatarUrl   String?   @db.VarChar(2048)
@@ -198,4 +205,34 @@ model RefreshToken {
 
   @@index([sessionId, expiresAt])
   @@map("refresh_tokens")
+}
+
+/// A bank account the user has linked after a successful name inquiry.
+/// The account number is not an identity number, but it is still only stored
+/// masked plus a digest, so a breach does not yield a usable account list.
+/// See ADR-004.
+model LinkedBankAccount {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  /// NIP bank code as supplied by the verification provider.
+  bankCode      String   @db.VarChar(16)
+  bankName      String   @db.VarChar(120)
+  /// Last four digits only, e.g. `******6789`.
+  accountMasked String   @db.VarChar(32)
+  /// HMAC of the full account number, so the same account can be recognised
+  /// without the number being recoverable from the database.
+  accountDigest String   @db.VarChar(128)
+  /// Name returned by the provider's inquiry, not name entered by the user.
+  accountName   String   @db.VarChar(200)
+  provider      String   @db.VarChar(64)
+  providerRef   String?  @db.VarChar(191)
+  verifiedAt    DateTime @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountDigest])
+  @@index([userId])
+  @@map("linked_bank_accounts")
 }
