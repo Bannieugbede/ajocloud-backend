@@ -43,7 +43,7 @@ export const environmentSchema = z
     TOKEN_PEPPER: z.string().min(32),
     JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
-    PAYMENT_PROVIDER: z.enum(['mock', 'paystack', 'flutterwave', 'monnify']).default('mock'),
+    PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     KYC_PROVIDER: z.enum(['mock', 'monnify', 'dojah']).default('mock'),
     EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
@@ -52,7 +52,6 @@ export const environmentSchema = z
       .regex(/^[A-Z]{3}$/)
       .default('NGN'),
     APPLICATION_TIMEZONE: z.string().min(1).default('Africa/Lagos'),
-    SMS_PROVIDER: z.enum(['mock']).default('mock'),
     // Expo's push service accepts unauthenticated sends for tokens it issued, so
     // no access token is required for the default setup.
     PUSH_PROVIDER: z.enum(['mock', 'expo']).default('mock'),
@@ -60,9 +59,6 @@ export const environmentSchema = z
     AWS_S3_BUCKET: z.string().optional(),
     AWS_ACCESS_KEY_ID: z.string().optional(),
     AWS_SECRET_ACCESS_KEY: z.string().optional(),
-    PAYSTACK_SECRET_KEY: z.string().optional(),
-    PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
-    FLUTTERWAVE_SECRET_KEY: z.string().optional(),
     MONNIFY_BASE_URL: optionalUrl,
     MONNIFY_API_KEY: z.string().optional(),
     MONNIFY_SECRET_KEY: z.string().optional(),

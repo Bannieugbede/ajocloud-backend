@@ -1,5 +1,3 @@
-
-
 services:
   api:
     build:
@@ -10,64 +8,72 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      # Coolify reads this to route the domain and issue TLS.
+      # --- Routing (Coolify reads SERVICE_FQDN_API to issue TLS) -------------
       SERVICE_FQDN_API: ${API_DOMAIN}
       NODE_ENV: production
-      APP_NAME: ${APP_NAME:-Ajo Cloud API}
-      APP_VERSION: ${APP_VERSION:-0.1.0}
       HOST: 0.0.0.0
       PORT: ${PORT:-3000}
       API_PREFIX: ${API_PREFIX:-api}
-      # Comma-separated browser origins, e.g. https://ajo.example.com
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_NAME: ${APP_NAME:-Ajo Cloud API}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
+      SESSION_COOKIE_SAMESITE_NONE: ${SESSION_COOKIE_SAMESITE_NONE:-false}
 
-      # Point these at the Coolify-managed Postgres and Redis resources. Use the
-      # internal hostnames Coolify assigns so traffic never leaves the network.
+      # --- Datastores --------------------------------------------------------
+      # Use the internal hostnames Coolify assigns so traffic stays on its
+      # private network.
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD}@rabbitmq:5672
 
+      # --- Secrets (each must be a distinct 32+ character random string) -----
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       TOKEN_PEPPER: ${TOKEN_PEPPER}
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
       IDEMPOTENCY_TTL_SECONDS: ${IDEMPOTENCY_TTL_SECONDS:-86400}
 
+      # --- Business defaults -------------------------------------------------
       DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-NGN}
       APPLICATION_TIMEZONE: ${APPLICATION_TIMEZONE:-Africa/Lagos}
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
 
+      # --- Providers ---------------------------------------------------------
+      # All default to "mock"/"console", which log instead of calling a live
+      # service. The keys below each provider are only read once it is switched.
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       BILL_PAYMENT_PROVIDER: ${BILL_PAYMENT_PROVIDER:-mock}
       KYC_PROVIDER: ${KYC_PROVIDER:-mock}
-      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
-      SMS_PROVIDER: ${SMS_PROVIDER:-mock}
-      # Expo push needs no server key for tokens Expo itself issued.
       PUSH_PROVIDER: ${PUSH_PROVIDER:-mock}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
 
-      AWS_REGION: ${AWS_REGION:-}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-
-      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
-      PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET:-}
-      FLUTTERWAVE_SECRET_KEY: ${FLUTTERWAVE_SECRET_KEY:-}
-      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-}
-      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
-      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
-      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
-      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
-      DOJAH_BASE_URL: ${DOJAH_BASE_URL:-}
-      DOJAH_APP_ID: ${DOJAH_APP_ID:-}
-      DOJAH_SECRET_KEY: ${DOJAH_SECRET_KEY:-}
-
+      # Required when EMAIL_PROVIDER=resend
       RESEND_BASE_URL: ${RESEND_BASE_URL:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_SENDER_EMAIL: ${RESEND_SENDER_EMAIL:-}
       RESEND_SENDER_NAME: ${RESEND_SENDER_NAME:-Ajo Cloud}
 
+      # Required when BILL_PAYMENT_PROVIDER or KYC_PROVIDER is monnify
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
+
+      # Required when KYC_PROVIDER=dojah
+      DOJAH_BASE_URL: ${DOJAH_BASE_URL:-}
+      DOJAH_APP_ID: ${DOJAH_APP_ID:-}
+      DOJAH_SECRET_KEY: ${DOJAH_SECRET_KEY:-}
+
+      # Document uploads (S3)
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+
+      # Observability
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       ERROR_MONITORING_DSN: ${ERROR_MONITORING_DSN:-}
     healthcheck:
