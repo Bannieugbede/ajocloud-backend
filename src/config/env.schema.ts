@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Treats a blank value as unset: deployment UIs commonly pass empty strings. */
+const blankAsUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
 const optionalUrl = z.union([z.url(), z.literal('')]).optional();
 const optionalEmail = z.union([z.email(), z.literal('')]).optional();
 
@@ -17,15 +20,15 @@ export const environmentSchema = z
     CORS_ORIGINS: z.string().min(1),
     // Allow http(s)://localhost:<any port> so local web/dev clients need no
     // redeploy to change port. Ignored when NODE_ENV=production.
-    CORS_ALLOW_LOOPBACK: z.stringbool().default(false),
+    CORS_ALLOW_LOOPBACK: blankAsUndefined(z.stringbool()).pipe(z.boolean().default(false)),
     // Browser sessions are carried in httpOnly cookies. When the web app is on a
     // different site than the API, cookies must be SameSite=None; Secure.
-    SESSION_COOKIE_SAMESITE_NONE: z.stringbool().default(false),
+    SESSION_COOKIE_SAMESITE_NONE: blankAsUndefined(z.stringbool()).pipe(z.boolean().default(false)),
     // Optional parent domain so one cookie covers app+api subdomains.
-    SESSION_COOKIE_DOMAIN: z.string().min(1).optional(),
+    SESSION_COOKIE_DOMAIN: blankAsUndefined(z.string().min(1)),
     // Optional: only used to sign cookie values; tokens are already verified
     // server-side (JWT signature / hashed refresh token) without it.
-    COOKIE_SECRET: z.string().min(32).optional(),
+    COOKIE_SECRET: blankAsUndefined(z.string().min(32)),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),

@@ -18,6 +18,26 @@ describe('environment validation', () => {
     expect(environment.EMAIL_PROVIDER).toBe('console');
   });
 
+  it('treats blank cookie/CORS values as unset (deployment UIs pass empty strings)', () => {
+    const environment = validateEnvironment({
+      ...valid,
+      CORS_ALLOW_LOOPBACK: '',
+      SESSION_COOKIE_SAMESITE_NONE: '',
+      SESSION_COOKIE_DOMAIN: '',
+      COOKIE_SECRET: '',
+    });
+    expect(environment.CORS_ALLOW_LOOPBACK).toBe(false);
+    expect(environment.SESSION_COOKIE_SAMESITE_NONE).toBe(false);
+    expect(environment.SESSION_COOKIE_DOMAIN).toBeUndefined();
+    expect(environment.COOKIE_SECRET).toBeUndefined();
+  });
+
+  it('still rejects a cookie secret that is present but too short', () => {
+    expect(() => validateEnvironment({ ...valid, COOKIE_SECRET: 'tooshort' })).toThrow(
+      'COOKIE_SECRET',
+    );
+  });
+
   it('requires provider credentials only when that provider is selected', () => {
     expect(() => validateEnvironment({ ...valid, EMAIL_PROVIDER: 'resend' })).toThrow(
       'RESEND_API_KEY is required for Resend',
