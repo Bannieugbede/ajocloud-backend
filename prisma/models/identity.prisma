@@ -21,9 +21,34 @@ model User {
   wallets                Wallet[]
   verificationChallenges AccountVerificationChallenge[]
   consents               UserConsent[]
+  identities             UserIdentity[]
+  transactionPin         TransactionPin?
 
   @@index([status, createdAt])
   @@map("users")
+}
+
+/// A federated sign-in identity (e.g. Google). A user may link several providers,
+/// but one provider account maps to exactly one user.
+model UserIdentity {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  provider       IdentityProvider
+  /// Provider's stable subject identifier. Never an email: emails can change.
+  providerUserId String           @db.VarChar(191)
+  /// Email asserted by the provider at link time, retained for support only.
+  email          String?          @db.VarChar(320)
+  linkedAt       DateTime         @default(now()) @db.Timestamptz(6)
+  lastLoginAt    DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("user_identities")
 }
 
 model AccountVerificationChallenge {
@@ -96,6 +121,26 @@ model UserCredential {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_credentials")
+}
+
+/// A user's transaction PIN, used to authorise money movement in the app.
+/// Only an Argon2id digest is stored; the PIN itself is never persisted or logged.
+model TransactionPin {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  pinHash     String    @db.VarChar(255)
+  /// Consecutive failures since the last success, used to lock the PIN.
+  failedCount Int       @default(0)
+  /// Set when failures exceed the limit; cleared by a successful reset.
+  lockedUntil DateTime? @db.Timestamptz(6)
+  lastUsedAt  DateTime? @db.Timestamptz(6)
+  changedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transaction_pins")
 }
 
 model Device {

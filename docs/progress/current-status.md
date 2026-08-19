@@ -73,3 +73,25 @@ All three migrations are now applied to the local PostgreSQL 18 `ajocloud` datab
 development seed executes against that migrated database.
 `bun audit --production` reports no high/critical findings and three unrelated moderate advisories:
 two in the Swagger static-asset dependency and one Prisma development transitive dependency.
+
+## 2026-08-19 — Transaction PIN and registration contract change
+
+`POST /auth/register` now requires `phone` in E.164 format and accepts an optional `referralCode`;
+`acceptedTerms` was removed so sign-up collects Privacy Policy consent only, against an explicit
+`PRIVACY_POLICY_VERSION`. This is a breaking change for any client sending the old body — the
+mobile app was updated in the same pass.
+
+Transaction PIN added: `transaction_pins` table (migration `20260819160000_transaction_pin`), an
+Argon2id-hashed digest, five-failure/15-minute lockout, and a refusal of predictable PINs.
+Replacing a PIN requires the current one. The PIN is never returned or logged.
+
+`bun run check` passed: Prisma validation/generation, formatting, lint, strict typecheck, 171 unit
+tests across 32 suites, and build.
+
+Still outstanding: BVN/NIN verification, the Nigerian bank list, and account-name inquiry, all
+needed by the mobile sign-up step form. These are BLOCKED on a KYC ADR covering provider choice and
+required Tier 2 fields. The agreed constraint is that the raw identifier is never persisted — only
+the masked value, result, and provider reference — per docs/kyc.md.
+
+The production database remains unreachable (`/health/ready` returns 503), so none of this has been
+exercised against the deployed API, and the requested seeding still cannot run.

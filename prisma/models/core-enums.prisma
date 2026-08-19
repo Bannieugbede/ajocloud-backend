@@ -9,6 +9,10 @@ enum CredentialType {
   PASSWORD
 }
 
+enum IdentityProvider {
+  GOOGLE
+}
+
 enum AccountVerificationChannel {
   PHONE
   EMAIL
@@ -17,6 +21,7 @@ enum AccountVerificationChannel {
 enum VerificationPurpose {
   ACCOUNT_VERIFICATION
   LOGIN
+  PASSWORD_RESET
 }
 
 enum ConsentType {

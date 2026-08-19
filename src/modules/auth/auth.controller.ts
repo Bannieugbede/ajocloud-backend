@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
   UnauthorizedException,
@@ -25,12 +27,18 @@ import {
   readCookie,
   setSessionCookies,
 } from './session-cookie.js';
+import { GoogleOAuthService, type OAuthClient } from './google-oauth.service.js';
+import { PasswordResetService } from './password-reset.service.js';
 import { PasswordlessService } from './passwordless.service.js';
 import { RequestOtpDto, ResendOtpDto, VerifyOtpDto } from './dto/otp.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { GoogleExchangeDto } from './dto/google-exchange.dto.js';
+import { CompletePasswordResetDto, RequestPasswordResetDto } from './dto/password-reset.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { AccessTokenGuard } from './guards/access-token.guard.js';
+import { TransactionPinService } from './transaction-pin.service.js';
+import { SetTransactionPinDto, VerifyTransactionPinDto } from './dto/transaction-pin.dto.js';
 import { ResendVerificationDto, VerifyAccountDto } from './dto/verify-account.dto.js';
 
 @ApiTags('auth')
@@ -39,6 +47,9 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly passwordless: PasswordlessService,
+    private readonly google: GoogleOAuthService,
+    private readonly passwordReset: PasswordResetService,
+    private readonly transactionPin: TransactionPinService,
     private readonly config: ConfigService<Environment, true>,
   ) {}
 
@@ -146,6 +157,109 @@ export class AuthController {
     return this.issueSession(reply, await this.auth.refresh(refreshToken));
   }
 
+  /**
+   * Starts Google sign-in. Both web and mobile open this URL in a browser; the
+   * `client` parameter only decides where the callback returns to.
+   */
+  @Get('google')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  startGoogle(
+    @Query('client') client: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): void {
+    void reply.redirect(this.google.authorizationUrl(toOAuthClient(client)), HttpStatus.FOUND);
+  }
+
+  /**
+   * Google redirects the browser here. The session cookies are set on this
+   * response, then the browser is sent to the client's own success URL: the
+   * tokens never travel in a query string where they could be logged.
+   */
+  @Get('google/callback')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    if (error || !code || !state) {
+      // The user declined, or Google returned an incomplete callback.
+      void reply.redirect(
+        `${this.google.successUrl('web')}?error=google_sign_in_failed`,
+        HttpStatus.FOUND,
+      );
+      return;
+    }
+    const { tokens, client } = await this.google.completeSignIn(code, state, this.context(request));
+
+    if (client === 'mobile') {
+      // Native clients keep tokens in SecureStore, and a deep-link URL can be
+      // recorded by the OS, so the link carries a one-time code instead.
+      const handoff = this.google.createHandoff(tokens);
+      const target = new URL(this.google.successUrl('mobile'));
+      target.searchParams.set('code', handoff);
+      void reply.redirect(target.toString(), HttpStatus.FOUND);
+      return;
+    }
+
+    this.issueSession(reply, tokens);
+    void reply.redirect(this.google.successUrl('web'), HttpStatus.FOUND);
+  }
+
+  /** Exchanges a mobile handoff code for the token pair, over TLS. */
+  @Post('google/exchange')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  exchangeGoogle(@Body() dto: GoogleExchangeDto): TokenPair {
+    return this.google.redeemHandoff(dto.code);
+  }
+
+  /** Starts a password reset. Always succeeds, so it cannot enumerate accounts. */
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+    return this.passwordReset.requestReset(dto.email);
+  }
+
+  /** Verifies the emailed code and sets the new password. */
+  @Post('password-reset/complete')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async completePasswordReset(@Body() dto: CompletePasswordResetDto): Promise<void> {
+    await this.passwordReset.completeReset(dto.challengeId, dto.code, dto.password);
+  }
+
+  @Get('transaction-pin')
+  @ApiBearerAuth()
+  @UseGuards(AccessTokenGuard)
+  transactionPinStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.transactionPin.status(user.userId);
+  }
+
+  @Post('transaction-pin')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(AccessTokenGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  setTransactionPin(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetTransactionPinDto) {
+    return this.transactionPin.setPin(user.userId, dto.pin, dto.currentPin);
+  }
+
+  @Post('transaction-pin/verify')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @UseGuards(AccessTokenGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async verifyTransactionPin(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VerifyTransactionPinDto,
+  ): Promise<void> {
+    await this.transactionPin.verifyPin(user.userId, dto.pin);
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
@@ -174,4 +288,9 @@ export class AuthController {
     const userAgent = request.headers['user-agent'];
     return { ipAddress: request.ip, ...(userAgent ? { userAgent } : {}) };
   }
+}
+
+/** Only two callers exist; anything else is treated as the web client. */
+function toOAuthClient(value: string | undefined): OAuthClient {
+  return value === 'mobile' ? 'mobile' : 'web';
 }

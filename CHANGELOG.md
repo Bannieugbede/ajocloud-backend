@@ -2,7 +2,43 @@
 
 ## Unreleased
 
+### Changed
+
+- `POST /auth/register` now requires `phone` in E.164 format and accepts an optional `referralCode`
+  (recorded on the registration audit entry for later attribution; whether it qualifies for a
+  reward remains a campaign decision, not a sign-up one). `acceptedTerms` was removed: sign-up now
+  collects Privacy Policy consent only, recorded against an explicit policy version.
+
 ### Added
+
+- Transaction PIN. `GET /auth/transaction-pin` reports whether one is set and any active lockout,
+  `POST /auth/transaction-pin` sets or replaces it, and `POST /auth/transaction-pin/verify` checks
+  it. The PIN is hashed with Argon2id on the same parameters as passwords and is never returned in
+  a response or written to a log. Five consecutive failures lock the PIN for 15 minutes, and while
+  locked even the correct PIN is refused. Replacing an existing PIN requires proving the current
+  one, so a hijacked session cannot lock the owner out of their own money. Predictable PINs — a
+  repeated digit, or a straight run in either direction — are refused outright, because a
+  four-digit space is small enough that those are tried first. New table: `transaction_pins`.
+
+- Password reset: `POST /auth/password-reset/request` issues a six-digit emailed code and
+  `POST /auth/password-reset/complete` verifies it and sets the new password. The request endpoint
+  always returns an identically shaped challenge — for unknown addresses, suspended accounts, and
+  accounts with no password (e.g. Google-only) alike — so it cannot enumerate users. Completing a
+  reset revokes every active session (`revokeReason: password_reset`) and marks the email verified.
+  Attempt limits, expiry, and single-use consumption match the existing verification policy.
+  New `VerificationPurpose.PASSWORD_RESET`.
+
+- Google sign-in, shared by web and mobile. `GET /auth/google?client=web|mobile` redirects to
+  Google's consent screen; `GET /auth/google/callback` exchanges the code, verifies the ID token's
+  signature, audience, issuer, and expiry, then signs the user in. Web receives the session as
+  httpOnly cookies and is redirected to `GOOGLE_WEB_SUCCESS_URL`; mobile receives a single-use,
+  two-minute handoff code on its deep link and exchanges it via `POST /auth/google/exchange`, so
+  tokens never appear in a URL. CSRF is covered by an HMAC-signed `state` parameter.
+  A verified Google email auto-links to an existing account and completes its email verification;
+  an unverified Google email is rejected. New accounts are created `ACTIVE` with no password.
+  New tables: `user_identities`. New env (all optional; unset disables the provider):
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `GOOGLE_WEB_SUCCESS_URL`,
+  `GOOGLE_MOBILE_SUCCESS_URL`.
 
 - Cookie-based browser sessions: `/auth/otp/verify`, `/auth/login`, `/auth/verify-email`, and
   `/auth/refresh` now set httpOnly `ajo_access` and `ajo_refresh` cookies (the refresh cookie is

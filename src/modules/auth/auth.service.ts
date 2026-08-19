@@ -36,6 +36,12 @@ import {
 } from './domain/verification-policy.js';
 import { VerificationDeliveryService } from './verification-delivery.service.js';
 
+/**
+ * Version of the privacy policy a new account consents to. Bump this when the
+ * policy changes so existing consents stay attributable to the text accepted.
+ */
+const PRIVACY_POLICY_VERSION = '2026-07-16';
+
 interface ClientContext {
   readonly ipAddress?: string;
   readonly userAgent?: string;
@@ -81,6 +87,8 @@ export class AuthService {
 
   async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
     const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone.trim();
+    const referralCode = dto.referralCode?.trim().toUpperCase();
     const challenge = this.newChallenge(email);
     const passwordHash = await hash(dto.password, {
       type: argon2id,
@@ -98,6 +106,7 @@ export class AuthService {
         const created = await tx.user.create({
           data: {
             email,
+            phone,
             status: UserStatus.PENDING_VERIFICATION,
             credential: { create: { passwordHash } },
             profile: { create: { firstName: dto.firstName.trim(), lastName: dto.lastName.trim() } },
@@ -106,13 +115,8 @@ export class AuthService {
             consents: {
               create: [
                 {
-                  type: ConsentType.TERMS,
-                  version: '2026-07-16',
-                  ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
-                },
-                {
                   type: ConsentType.PRIVACY,
-                  version: '2026-07-16',
+                  version: PRIVACY_POLICY_VERSION,
                   ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
                 },
               ],
@@ -149,6 +153,9 @@ export class AuthService {
             action: 'auth.registered',
             subjectType: 'User',
             subjectId: created.id,
+            // The code itself is not sensitive, but it is only recorded when
+            // one was supplied so the log stays a faithful record of intent.
+            ...(referralCode ? { metadata: { referralCode } } : {}),
             ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
           },
         });
@@ -369,6 +376,15 @@ export class AuthService {
    * another factor (e.g. a redeemed one-time sign-in code).
    */
   createPasswordlessSession(userId: string, context: ClientContext): Promise<TokenPair> {
+    return this.createSession(userId, context);
+  }
+
+  /**
+   * Issues a session for an already-authenticated user. Federated sign-in has
+   * verified the identity by another route, so no credential check happens here.
+   */
+  async createSessionForUser(userId: string, context: ClientContext): Promise<TokenPair> {
+    await this.prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
     return this.createSession(userId, context);
   }
 

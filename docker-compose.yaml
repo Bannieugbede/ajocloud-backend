@@ -49,6 +49,13 @@ services:
       PUSH_PROVIDER: ${PUSH_PROVIDER:-mock}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
 
+      # Google sign-in. Unset disables it; set all four to enable.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
+      GOOGLE_WEB_SUCCESS_URL: ${GOOGLE_WEB_SUCCESS_URL:-}
+      GOOGLE_MOBILE_SUCCESS_URL: ${GOOGLE_MOBILE_SUCCESS_URL:-ajocloud:///auth/google}
+
       # Required when EMAIL_PROVIDER=resend
       RESEND_BASE_URL: ${RESEND_BASE_URL:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

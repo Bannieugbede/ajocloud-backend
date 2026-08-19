@@ -47,6 +47,17 @@ export const environmentSchema = z
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     KYC_PROVIDER: z.enum(['mock', 'monnify', 'dojah']).default('mock'),
     EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
+    // Google sign-in. Unset disables the provider; the routes then return 404.
+    GOOGLE_CLIENT_ID: blankAsUndefined(z.string().min(1)),
+    GOOGLE_CLIENT_SECRET: blankAsUndefined(z.string().min(1)),
+    // Absolute callback URL registered in the Google console, e.g.
+    // https://api.mirumversal.com/api/v1/auth/google/callback
+    GOOGLE_CALLBACK_URL: blankAsUndefined(z.url()),
+    // Where the browser lands after a successful web sign-in.
+    GOOGLE_WEB_SUCCESS_URL: blankAsUndefined(z.url()),
+    // Mobile deep link, e.g. ajocloud://auth/google. Only these two targets are
+    // ever redirected to, so the callback cannot be pointed at an open redirect.
+    GOOGLE_MOBILE_SUCCESS_URL: blankAsUndefined(z.string().min(1)),
     DEFAULT_CURRENCY: z
       .string()
       .regex(/^[A-Z]{3}$/)
@@ -76,6 +87,23 @@ export const environmentSchema = z
     SWAGGER_ENABLED: z.stringbool().default(true),
   })
   .superRefine((environment, context) => {
+    const googleKeys = [
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
+      'GOOGLE_CALLBACK_URL',
+      'GOOGLE_WEB_SUCCESS_URL',
+    ] as const;
+    if (googleKeys.some((key) => environment[key])) {
+      for (const key of googleKeys) {
+        if (!environment[key]) {
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required when Google sign-in is configured`,
+          });
+        }
+      }
+    }
     if (environment.EMAIL_PROVIDER === 'resend') {
       for (const key of ['RESEND_API_KEY', 'RESEND_SENDER_EMAIL'] as const) {
         if (!environment[key]) {

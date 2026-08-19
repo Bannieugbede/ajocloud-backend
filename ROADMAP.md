@@ -139,6 +139,15 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Tier 1/2/3 data model and action policy
 - [x] **COMPLETE** BVN, NIN/vNIN, bank inquiry, face, liveness, and address provider interfaces
 - [ ] **NOT STARTED** KYC status and Tier 1 API
+- [x] **IN REVIEW (2026-08-19)** Transaction PIN. `TransactionPin` model plus
+      `GET/POST /auth/transaction-pin` and `POST /auth/transaction-pin/verify`. The PIN is hashed
+      with Argon2id exactly as passwords are and is never returned or logged; five consecutive
+      failures lock it for 15 minutes, and replacing a PIN requires proving the current one.
+      Predictable PINs (repeated digits, straight runs) are refused. 27 tests.
+- [ ] **BLOCKED (2026-08-19)** BVN/NIN verification, Nigerian bank list, and account-name inquiry,
+      needed by the mobile sign-up step form. Requires an ADR settling provider choice, required
+      Tier 2 fields, and retry/failure limits. Agreed constraint: the raw identifier is never
+      persisted — only the masked value, result, and provider reference, per docs/kyc.md.
 - [ ] **NOT STARTED** Bank linking/name inquiry workflow
 - [ ] **NOT STARTED** BVN workflow
 - [ ] **NOT STARTED** NIN/vNIN workflow

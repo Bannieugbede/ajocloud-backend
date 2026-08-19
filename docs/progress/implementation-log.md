@@ -136,3 +136,13 @@
 - Security: Argon2id, hashed rotating refresh tokens with reuse revocation, strict DTOs/CORS/headers/rate limits, scoped authorization, secret/audit redaction, non-root image.
 - Remaining: provider adapters/webhooks, integration/concurrency tests, outbox relay/consumers, swap/penalty/contribution/payout services, later product modules, and production readiness work.
 - Quality: format, lint, strict typecheck, Prisma validate/generate, build, 12 unit tests, and 1 Fastify E2E test passed. Integration command found no tests. Coverage was 10.14% statements overall. Migration status failed only because local PostgreSQL was unavailable. Audit found two moderate transitive advisories and no high/critical findings.
+
+## 2026-08-19 — Transaction PIN, registration fields, privacy-only consent
+
+- Scope: back the mobile account-creation step form. Registration contract widened; transaction PIN added end to end.
+- Files: `prisma/models/identity.prisma` (`TransactionPin`), `prisma/migrations/20260819160000_transaction_pin/`, `src/modules/auth/domain/transaction-pin-policy.ts`, `src/modules/auth/transaction-pin.service.ts`, `src/modules/auth/dto/transaction-pin.dto.ts`, `src/modules/auth/dto/register.dto.ts`, `src/modules/auth/auth.service.ts`, `src/modules/auth/auth.controller.ts`, `src/modules/auth/auth.module.ts`.
+- Tests: 27 new (12 policy, 15 service) covering shape and weak-PIN rules, lockout thresholds and expiry, refusal while locked without spending an attempt, replacement requiring the current PIN, and an assertion that the PIN appears nowhere in the payload handed to the database.
+- Decisions: PIN hashed with Argon2id at the password parameters; five consecutive failures lock for 15 minutes; predictable PINs refused because a four-digit space is small; replacement requires the current PIN so a hijacked session cannot lock the owner out.
+- Breaking: `POST /auth/register` requires `phone` (E.164) and no longer accepts `acceptedTerms`; consent is Privacy Policy only, versioned via `PRIVACY_POLICY_VERSION`. `referralCode` is optional and recorded on the registration audit entry rather than resolved at sign-up, since referral qualification is a campaign rule.
+- Quality: `bun run check` passed — Prisma validate/generate, format, lint, strict typecheck, 171 unit tests across 32 suites, build.
+- Remaining: BVN/NIN verification, Nigerian bank list, and account-name inquiry are BLOCKED on a KYC ADR. Nothing verified against the deployed API: the production database is still unreachable.
