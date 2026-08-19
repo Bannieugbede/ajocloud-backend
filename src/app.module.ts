@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { CsrfGuard } from './modules/auth/guards/csrf.guard.js';
 import type { Environment } from './config/env.schema.js';
 import { ConfigurationModule } from './config/configuration.module.js';
 import { CacheModule } from './infrastructure/cache/cache.module.js';
@@ -59,6 +60,10 @@ import { EngagementModule } from './modules/engagement/engagement.module.js';
     AdminModule,
     EngagementModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Double-submit CSRF check; only applies to cookie-authenticated requests.
+    { provide: APP_GUARD, useClass: CsrfGuard },
+  ],
 })
 export class AppModule {}

@@ -1,10 +1,30 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'node:crypto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
+import type { Environment } from '../../config/env.schema.js';
 import { AuthService } from './auth.service.js';
+import type { TokenPair } from './auth.service.js';
+import {
+  REFRESH_COOKIE,
+  clearSessionCookies,
+  readCookie,
+  setSessionCookies,
+} from './session-cookie.js';
 import { PasswordlessService } from './passwordless.service.js';
 import { RequestOtpDto, ResendOtpDto, VerifyOtpDto } from './dto/otp.dto.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -19,7 +39,31 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly passwordless: PasswordlessService,
+    private readonly config: ConfigService<Environment, true>,
   ) {}
+
+  /** Cookie flags depend on deployment (same-site vs cross-site, domain). */
+  private get cookieEnv(): Environment {
+    return {
+      NODE_ENV: this.config.get('NODE_ENV', { infer: true }),
+      API_PREFIX: this.config.get('API_PREFIX', { infer: true }),
+      JWT_REFRESH_TTL_SECONDS: this.config.get('JWT_REFRESH_TTL_SECONDS', { infer: true }),
+      SESSION_COOKIE_SAMESITE_NONE: this.config.get('SESSION_COOKIE_SAMESITE_NONE', {
+        infer: true,
+      }),
+      SESSION_COOKIE_DOMAIN: this.config.get('SESSION_COOKIE_DOMAIN', { infer: true }),
+    } as Environment;
+  }
+
+  /**
+   * Issues the session cookies for a freshly minted token pair and returns the
+   * body for the caller. Bearer clients still receive the tokens in the body;
+   * browsers simply ignore them and rely on the cookies.
+   */
+  private issueSession(reply: FastifyReply, tokens: TokenPair): TokenPair {
+    setSessionCookies(reply, tokens, randomBytes(32).toString('hex'), this.cookieEnv);
+    return tokens;
+  }
 
   @Post('otp/request')
   @HttpCode(HttpStatus.OK)
@@ -38,8 +82,17 @@ export class AuthController {
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  verifyOtp(@Body() dto: VerifyOtpDto, @Req() request: FastifyRequest) {
-    return this.passwordless.verifyCode(dto.challengeId, dto.code, this.context(request));
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const tokens = await this.passwordless.verifyCode(
+      dto.challengeId,
+      dto.code,
+      this.context(request),
+    );
+    return this.issueSession(reply, tokens);
   }
 
   @Post('register')
@@ -51,15 +104,24 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  login(@Body() dto: LoginDto, @Req() request: FastifyRequest) {
-    return this.auth.login(dto, this.context(request));
+  async login(
+    @Body() dto: LoginDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    return this.issueSession(reply, await this.auth.login(dto, this.context(request)));
   }
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  verifyEmail(@Body() dto: VerifyAccountDto, @Req() request: FastifyRequest) {
-    return this.auth.verifyEmail(dto.userId, dto.code, this.context(request));
+  async verifyEmail(
+    @Body() dto: VerifyAccountDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const tokens = await this.auth.verifyEmail(dto.userId, dto.code, this.context(request));
+    return this.issueSession(reply, tokens);
   }
 
   @Post('resend-verification')
@@ -72,24 +134,40 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  refresh(@Body() dto: RefreshDto) {
-    return this.auth.refresh(dto.refreshToken);
+  async refresh(
+    @Body() dto: RefreshDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    // Browsers send the rotating refresh token as an httpOnly cookie; mobile
+    // clients still post it in the body.
+    const refreshToken = readCookie(request, REFRESH_COOKIE) ?? dto.refreshToken;
+    if (!refreshToken) throw new UnauthorizedException('Authentication required');
+    return this.issueSession(reply, await this.auth.refresh(refreshToken));
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @UseGuards(AccessTokenGuard)
-  async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+  async logout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
     await this.auth.logout(user.sessionId);
+    clearSessionCookies(reply, this.cookieEnv);
   }
 
   @Post('logout-all')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @UseGuards(AccessTokenGuard)
-  async logoutAll(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+  async logoutAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
     await this.auth.logoutAll(user.userId);
+    clearSessionCookies(reply, this.cookieEnv);
   }
 
   private context(request: FastifyRequest): { ipAddress: string; userAgent?: string } {

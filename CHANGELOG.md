@@ -4,6 +4,16 @@
 
 ### Added
 
+- Cookie-based browser sessions: `/auth/otp/verify`, `/auth/login`, `/auth/verify-email`, and
+  `/auth/refresh` now set httpOnly `ajo_access` and `ajo_refresh` cookies (the refresh cookie is
+  scoped to `/<prefix>/v1/auth`), plus a JS-readable `ajo_csrf` cookie for double-submit CSRF
+  protection enforced by a global `CsrfGuard` on cookie-authenticated writes. `AccessTokenGuard`
+  accepts either the cookie or the existing `Authorization: Bearer` header, so mobile and
+  server-to-server clients are unaffected. New env: `SESSION_COOKIE_SAMESITE_NONE`,
+  `SESSION_COOKIE_DOMAIN`, `COOKIE_SECRET` (all optional), and CORS now allows credentials.
+- `CORS_ALLOW_LOOPBACK` accepts `http(s)://localhost|127.0.0.1|[::1]` on any port for local web
+  development. Ignored when `NODE_ENV=production`.
+
 - Public engagement API: `POST /api/v1/engagement/waitlist` (join the pre-launch waitlist with
   names, email, +234-normalized phone, and promotion opt-in) and
   `POST /api/v1/engagement/support-inquiries` (submit a support inquiry), backed by new

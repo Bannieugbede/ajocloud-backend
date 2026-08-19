@@ -8,6 +8,7 @@ Report vulnerabilities privately to the project security owner; do not open a pu
 
 - Secrets enter through validated runtime environment variables and must be managed by a production secret manager. `.env` is ignored.
 - Authentication uses Argon2id passwords, short-lived signed access tokens, and hashed rotating refresh tokens. Reuse marks a session compromised.
+- Browser clients carry sessions in httpOnly, Secure cookies so tokens are never exposed to JavaScript (no web storage). Cross-site deployments use `SameSite=None` and are protected by a double-submit CSRF token; non-browser clients continue to send `Authorization: Bearer`.
 - Authorization combines roles/permissions with organisation, group, user, and wallet ownership checks.
 - Financial commands use integer minor units, unique references, serializable boundaries where needed, immutable balanced ledger entries, reversals, and idempotency records.
 - Provider webhooks require adapter-level signature verification, replay-resistant provider event IDs, persistence before processing, and redacted logging. Real adapters remain blocked until reviewed.

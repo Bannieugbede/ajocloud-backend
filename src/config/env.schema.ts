@@ -15,6 +15,17 @@ export const environmentSchema = z
       .regex(/^[a-z][a-z0-9-]*$/)
       .default('api'),
     CORS_ORIGINS: z.string().min(1),
+    // Allow http(s)://localhost:<any port> so local web/dev clients need no
+    // redeploy to change port. Ignored when NODE_ENV=production.
+    CORS_ALLOW_LOOPBACK: z.stringbool().default(false),
+    // Browser sessions are carried in httpOnly cookies. When the web app is on a
+    // different site than the API, cookies must be SameSite=None; Secure.
+    SESSION_COOKIE_SAMESITE_NONE: z.stringbool().default(false),
+    // Optional parent domain so one cookie covers app+api subdomains.
+    SESSION_COOKIE_DOMAIN: z.string().min(1).optional(),
+    // Optional: only used to sign cookie values; tokens are already verified
+    // server-side (JWT signature / hashed refresh token) without it.
+    COOKIE_SECRET: z.string().min(32).optional(),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),

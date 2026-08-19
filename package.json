@@ -43,6 +43,7 @@
     "check": "bun run prisma:validate && bun run prisma:generate && bun run format:check && bun run lint && bun run typecheck && bun run test:unit && bun run build"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.2",
     "@fastify/cors": "11.3.0",
     "@fastify/helmet": "13.1.0",
     "@fastify/static": "8.2.0",

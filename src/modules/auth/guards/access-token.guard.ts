@@ -6,12 +6,24 @@ import { SessionStatus, UserStatus } from '../../../../generated/prisma/enums.js
 import type { AuthenticatedUser } from '../../../common/types/authenticated-user.js';
 import type { Environment } from '../../../config/env.schema.js';
 import { PrismaService } from '../../../infrastructure/database/prisma.service.js';
+import { ACCESS_COOKIE, readCookie } from '../session-cookie.js';
 
 type AuthenticatedRequest = FastifyRequest & { user?: AuthenticatedUser };
 interface AccessClaims {
   readonly sub: string;
   readonly sid: string;
   readonly typ: string;
+}
+
+/**
+ * Browser clients authenticate with an httpOnly cookie; mobile and server-to-
+ * server callers keep using the Authorization header. The header wins when both
+ * are present so an explicit credential is never shadowed by a stale cookie.
+ */
+function extractAccessToken(request: FastifyRequest): string | undefined {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith('Bearer ')) return authorization.slice(7);
+  return readCookie(request, ACCESS_COOKIE);
 }
 
 @Injectable()
@@ -28,11 +40,10 @@ export class AccessTokenGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const authorization = request.headers.authorization;
-    if (!authorization?.startsWith('Bearer '))
-      throw new UnauthorizedException('Authentication required');
+    const token = extractAccessToken(request);
+    if (!token) throw new UnauthorizedException('Authentication required');
     try {
-      const claims = await this.jwt.verifyAsync<AccessClaims>(authorization.slice(7), {
+      const claims = await this.jwt.verifyAsync<AccessClaims>(token, {
         secret: this.secret,
       });
       if (claims.typ !== 'access') throw new Error('invalid token type');
