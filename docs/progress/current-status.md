@@ -37,13 +37,13 @@ deposits remain outstanding.
 
 ## Blocked
 
-The real Monnify Bill Payment adapter/webhook and real Monnify/Dojah KYC adapters are blocked by absent verified provider contracts. Multiple Ajo payout recipients/default handling, the ambiguous referral “#5” rule, and production fee limits require product/compliance decisions. Brevo production approval still requires compliance, sender-domain/SMS Sender ID, and webhook decisions. Docker is unavailable, but PostgreSQL 18 from Postgres.app was used to apply both migrations and run transaction tests.
+The real Monnify Bill Payment adapter/webhook remains blocked by absent verified provider contracts. Monnify is now the single payments, verification, and payout provider (ADR-005); its identity adapter is implemented but its endpoint paths are unconfirmed against a live account. Multiple Ajo payout recipients/default handling, the ambiguous referral “#5” rule, and production fee limits require product/compliance decisions. Brevo production approval still requires compliance, sender-domain/SMS Sender ID, and webhook decisions. Docker is unavailable, but PostgreSQL 18 from Postgres.app was used to apply both migrations and run transaction tests.
 
 ## Next recommended tasks
 
 1. Add service-level PostgreSQL concurrency/replay tests for group locking/swaps and the complete Bill Payment orchestration.
 2. Implement scheduled provider inquiry plus durable outbox relay/inbox consumers and notification workers.
-3. Obtain and review current Monnify/Dojah specifications and commercial terms before implementing real adapters or webhooks.
+3. Obtain and review current Monnify specifications and commercial terms before enabling real adapters or webhooks, and confirm the identity endpoint paths in `src/infrastructure/external-services/monnify/README.md`.
 4. Approve Ajo default/multiple-recipient rules and the referral qualification ambiguity.
 5. Implement Food Ajo activation/price locking and subscriptions, plus Akawo schedule execution,
    ledger-backed deposits, and withdrawals.

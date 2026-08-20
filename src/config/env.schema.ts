@@ -45,7 +45,7 @@ export const environmentSchema = z
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
     PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
-    KYC_PROVIDER: z.enum(['mock', 'monnify', 'dojah']).default('mock'),
+    KYC_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
     // Google sign-in. Unset disables the provider; the routes then return 404.
     GOOGLE_CLIENT_ID: blankAsUndefined(z.string().min(1)),
@@ -75,9 +75,6 @@ export const environmentSchema = z
     MONNIFY_SECRET_KEY: z.string().optional(),
     MONNIFY_CONTRACT_CODE: z.string().optional(),
     MONNIFY_WEBHOOK_SECRET: z.string().optional(),
-    DOJAH_BASE_URL: optionalUrl,
-    DOJAH_APP_ID: z.string().optional(),
-    DOJAH_SECRET_KEY: z.string().optional(),
     RESEND_BASE_URL: optionalUrl,
     RESEND_API_KEY: z.string().optional(),
     RESEND_SENDER_EMAIL: optionalEmail,
@@ -133,28 +130,15 @@ export const environmentSchema = z
       }
     }
     if (environment.KYC_PROVIDER === 'monnify') {
-      for (const key of [
-        'MONNIFY_BASE_URL',
-        'MONNIFY_API_KEY',
-        'MONNIFY_SECRET_KEY',
-        'MONNIFY_CONTRACT_CODE',
-      ] as const) {
+      // Verification authenticates with the API key/secret pair only. The
+      // contract code scopes payment collection and payouts, not identity
+      // lookups, so requiring it here would block a verification-only setup.
+      for (const key of ['MONNIFY_BASE_URL', 'MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY'] as const) {
         if (!environment[key]) {
           context.addIssue({
             code: 'custom',
             path: [key],
             message: `${key} is required for Monnify KYC`,
-          });
-        }
-      }
-    }
-    if (environment.KYC_PROVIDER === 'dojah') {
-      for (const key of ['DOJAH_BASE_URL', 'DOJAH_APP_ID', 'DOJAH_SECRET_KEY'] as const) {
-        if (!environment[key]) {
-          context.addIssue({
-            code: 'custom',
-            path: [key],
-            message: `${key} is required for Dojah`,
           });
         }
       }

@@ -45,8 +45,8 @@ describe('environment validation', () => {
     expect(() => validateEnvironment({ ...valid, BILL_PAYMENT_PROVIDER: 'monnify' })).toThrow(
       'MONNIFY_API_KEY is required for Monnify',
     );
-    expect(() => validateEnvironment({ ...valid, KYC_PROVIDER: 'dojah' })).toThrow(
-      'DOJAH_APP_ID is required for Dojah',
+    expect(() => validateEnvironment({ ...valid, KYC_PROVIDER: 'monnify' })).toThrow(
+      'MONNIFY_API_KEY is required for Monnify KYC',
     );
   });
 

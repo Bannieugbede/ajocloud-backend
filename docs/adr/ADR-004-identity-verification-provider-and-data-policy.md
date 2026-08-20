@@ -1,6 +1,9 @@
 # ADR-004 — Identity verification provider and identity-data policy
 
-- Status: Accepted for Tier 2 onboarding (BVN/NIN and bank-account inquiry)
+- Status: Data policy accepted and in force. **Provider choice superseded by
+  [ADR-005](ADR-005-monnify-as-single-financial-and-identity-provider.md)**:
+  Monnify replaced Dojah on 2026-08-20. Read every mention of Dojah below as
+  Monnify; the identity-data rules are unaffected by the swap.
 - Date: 2026-08-19
 - Supersedes: nothing. Extends [progressive KYC](../kyc.md).
 

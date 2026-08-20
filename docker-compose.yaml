@@ -62,17 +62,14 @@ services:
       RESEND_SENDER_EMAIL: ${RESEND_SENDER_EMAIL:-}
       RESEND_SENDER_NAME: ${RESEND_SENDER_NAME:-Ajo Cloud}
 
-      # Required when BILL_PAYMENT_PROVIDER or KYC_PROVIDER is monnify
+      # Required when PAYMENT_PROVIDER, BILL_PAYMENT_PROVIDER, or KYC_PROVIDER
+      # is monnify. Monnify is the single payments, verification, and payout
+      # provider (ADR-005).
       MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-}
       MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
       MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
       MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
       MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
-
-      # Required when KYC_PROVIDER=dojah
-      DOJAH_BASE_URL: ${DOJAH_BASE_URL:-}
-      DOJAH_APP_ID: ${DOJAH_APP_ID:-}
-      DOJAH_SECRET_KEY: ${DOJAH_SECRET_KEY:-}
 
       # Document uploads (S3)
       AWS_REGION: ${AWS_REGION:-}

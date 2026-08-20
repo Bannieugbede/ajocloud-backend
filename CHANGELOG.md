@@ -16,12 +16,14 @@
   gender, residential address, city, state, and occupation (refusing anyone under 18),
   `POST /kyc/identity` verifies a BVN or NIN, `GET /kyc/banks` serves the provider bank list,
   `POST /kyc/banks/inquire` resolves an account name, and `POST /kyc/bank-accounts` links the
-  account once the name has been confirmed. Provider and data policy are set by
+  account once the name has been confirmed. The data policy is set by
   [ADR-004](docs/adr/ADR-004-identity-verification-provider-and-data-policy.md).
 
-  **Dojah** is the identity provider. Selection stays behind `KYC_PROVIDER`; anything other than
-  `dojah` falls back to a mock that never reports a real-world identity as verified, so no
-  environment can mistake a development pass for a genuine check.
+  **Monnify** is the single provider for payments, identity verification, and payouts, per
+  [ADR-005](docs/adr/ADR-005-monnify-as-single-financial-and-identity-provider.md). Selection stays
+  behind `KYC_PROVIDER`; anything other than `monnify` falls back to a mock that never reports a
+  real-world identity as verified, so no environment can mistake a development pass for a genuine
+  check. vNIN is not supported by Monnify and is refused rather than sent to the NIN endpoint.
 
   The raw BVN/NIN is **never persisted**. It is held for the life of one request, sent to the
   provider over TLS, and discarded; only the masked value (`*******1234`), the pass/fail result,

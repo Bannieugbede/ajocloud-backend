@@ -152,7 +152,7 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [ ] **NOT STARTED** BVN workflow
 - [ ] **NOT STARTED** NIN/vNIN workflow
 - [ ] **NOT STARTED** Biometric/address workflow and retention jobs
-- [ ] **BLOCKED** Real Monnify/Dojah adapters and higher-tier limits — provider/compliance rules unverified
+- [ ] **BLOCKED** Real Monnify payment/bill-payment/payout adapters and higher-tier limits — provider/compliance rules unverified. Monnify identity verification is implemented (ADR-005) but its endpoint paths are unconfirmed.
 
 ## Phase 9 — Referrals and rewards
 
