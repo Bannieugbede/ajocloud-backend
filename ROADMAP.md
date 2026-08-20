@@ -152,6 +152,8 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [ ] **NOT STARTED** BVN workflow
 - [ ] **NOT STARTED** NIN/vNIN workflow
 - [ ] **NOT STARTED** Biometric/address workflow and retention jobs
+- [ ] **RELEASE BLOCKER** Re-verify or demote every KYC check flagged `SANDBOX_FALLBACK` before the first production release; those identities passed against the mock provider, not Monnify (ADR-006).
+- [ ] **BLOCKED** Ledger posting for settlement, refund, and disbursement webhook events — account mapping and fee treatment need an ADR.
 - [ ] **BLOCKED** Real Monnify payment/bill-payment/payout adapters and higher-tier limits — provider/compliance rules unverified. Monnify identity verification is implemented (ADR-005) but its endpoint paths are unconfirmed.
 
 ## Phase 9 — Referrals and rewards

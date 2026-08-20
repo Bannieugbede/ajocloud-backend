@@ -36,6 +36,18 @@ describe('CsrfGuard', () => {
     expect(() => guard.canActivate(context(request))).toThrow(ForbiddenException);
   });
 
+  it('lets a provider webhook through, since it carries no session cookie', () => {
+    // Webhooks are POSTs from a server with no cookies. If this guard blocked
+    // them they would fail after passing signature verification. ADR-006 states
+    // this exemption holds; this test is why it is not merely an assumption.
+    const request = {
+      method: 'POST',
+      headers: { 'monnify-signature': 'a'.repeat(128) },
+      cookies: {},
+    };
+    expect(guard.canActivate(context(request))).toBe(true);
+  });
+
   it('rejects a mismatched token', () => {
     const request = {
       method: 'POST',

@@ -46,6 +46,15 @@ export const environmentSchema = z
     PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     KYC_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
+    // Accept Monnify webhooks. Requires MONNIFY_WEBHOOK_SECRET: the signature
+    // check is the only thing standing between a public URL and a money
+    // instruction, so there is deliberately no way to run these routes without
+    // it. See ADR-006.
+    MONNIFY_WEBHOOKS_ENABLED: z.stringbool().default(false),
+    // Let a sandbox-limited verification failure fall back to the mock provider
+    // so mobile testing is not blocked by test keys. Rejected outright in
+    // production by the refinement below.
+    KYC_SANDBOX_FALLBACK: z.stringbool().default(false),
     EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
     // Google sign-in. Unset disables the provider; the routes then return 404.
     GOOGLE_CLIENT_ID: blankAsUndefined(z.string().min(1)),
@@ -128,6 +137,23 @@ export const environmentSchema = z
           });
         }
       }
+    }
+    if (environment.MONNIFY_WEBHOOKS_ENABLED && !environment.MONNIFY_WEBHOOK_SECRET) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MONNIFY_WEBHOOK_SECRET'],
+        message:
+          'MONNIFY_WEBHOOK_SECRET is required when MONNIFY_WEBHOOKS_ENABLED is true; webhooks are never accepted unverified',
+      });
+    }
+    // A sandbox fallback marks identities verified without a real check. It is
+    // a test affordance, and must not be reachable in production at all.
+    if (environment.KYC_SANDBOX_FALLBACK && environment.NODE_ENV === 'production') {
+      context.addIssue({
+        code: 'custom',
+        path: ['KYC_SANDBOX_FALLBACK'],
+        message: 'KYC_SANDBOX_FALLBACK must not be enabled in production',
+      });
     }
     if (environment.KYC_PROVIDER === 'monnify') {
       // Verification authenticates with the API key/secret pair only. The

@@ -28,6 +28,7 @@ import { AkawoModule } from './modules/akawo/akawo.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
 import { EngagementModule } from './modules/engagement/engagement.module.js';
 import { KycModule } from './modules/kyc/kyc.module.js';
+import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { KycModule } from './modules/kyc/kyc.module.js';
     AdminModule,
     EngagementModule,
     KycModule,
+    WebhooksModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

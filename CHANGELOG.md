@@ -4,12 +4,34 @@
 
 ### Changed
 
+- Malformed JSON now returns 400 instead of 500. Fastify treats an error thrown
+  from a content-type parser as a server fault unless given a status code.
+
 - `POST /auth/register` now requires `phone` in E.164 format and accepts an optional `referralCode`
   (recorded on the registration audit entry for later attribution; whether it qualifies for a
   reward remains a campaign decision, not a sign-up one). `acceptedTerms` was removed: sign-up now
   collects Privacy Policy consent only, recorded against an explicit policy version.
 
 ### Added
+
+- Monnify webhook ingestion at `POST /api/v1/webhooks/monnify/*`, one route per
+  dashboard callback: transaction completion, refund completion, disbursement,
+  settlement, wallet activity, low balance, and bills payment. Every delivery
+  must carry a valid `monnify-signature` (HMAC-SHA512 over the raw body),
+  checked in constant time; failures are 401 and are never parsed or acted on.
+  Deliveries are deduplicated on `(provider, providerEventId)` so provider
+  retries are no-ops, and events older than five minutes are recorded as failed.
+  Enabled by `MONNIFY_WEBHOOKS_ENABLED`, which requires
+  `MONNIFY_WEBHOOK_SECRET`; while disabled the routes return 503 rather than
+  accepting unverified traffic. Recording only — no webhook posts to the ledger,
+  which needs its own ADR. See
+  [ADR-006](docs/adr/ADR-006-monnify-webhooks-and-sandbox-verification.md).
+- `KYC_SANDBOX_FALLBACK` lets a sandbox-limited verification failure fall back to
+  the mock provider so mobile testing is not blocked by Monnify test keys. It is
+  refused in production by environment validation, applies only to provider-side
+  failures (never to a definitive "identity not found"), and flags every result
+  `SANDBOX_FALLBACK` attributed to `mock`, so sandbox passes stay
+  distinguishable from genuine checks.
 
 - Tier 2 identity verification, settling steps g-i of the account-creation step form.
   `GET /kyc/status` reports what remains, `PATCH /kyc/personal-details` collects date of birth,

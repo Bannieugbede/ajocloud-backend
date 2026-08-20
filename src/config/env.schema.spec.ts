@@ -50,6 +50,34 @@ describe('environment validation', () => {
     );
   });
 
+  it('refuses to enable webhooks without a signing secret', () => {
+    expect(() => validateEnvironment({ ...valid, MONNIFY_WEBHOOKS_ENABLED: 'true' })).toThrow(
+      'MONNIFY_WEBHOOK_SECRET is required when MONNIFY_WEBHOOKS_ENABLED is true',
+    );
+    expect(() =>
+      validateEnvironment({
+        ...valid,
+        MONNIFY_WEBHOOKS_ENABLED: 'true',
+        MONNIFY_WEBHOOK_SECRET: 'signing-secret',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses the sandbox KYC fallback in production', () => {
+    expect(() =>
+      validateEnvironment({ ...valid, NODE_ENV: 'production', KYC_SANDBOX_FALLBACK: 'true' }),
+    ).toThrow('KYC_SANDBOX_FALLBACK must not be enabled in production');
+    expect(() =>
+      validateEnvironment({ ...valid, NODE_ENV: 'development', KYC_SANDBOX_FALLBACK: 'true' }),
+    ).not.toThrow();
+  });
+
+  it('leaves webhooks and the sandbox fallback disabled by default', () => {
+    const environment = validateEnvironment({ ...valid });
+    expect(environment.MONNIFY_WEBHOOKS_ENABLED).toBe(false);
+    expect(environment.KYC_SANDBOX_FALLBACK).toBe(false);
+  });
+
   it('accepts blank optional provider values for disabled integrations', () => {
     expect(
       validateEnvironment({
