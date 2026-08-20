@@ -1,4 +1,4 @@
-import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyRequest } from 'fastify';
 
 /**
@@ -13,6 +13,13 @@ import type { FastifyRequest } from 'fastify';
  * Scope is deliberately narrow: only requests whose URL sits under the webhook
  * prefix retain a buffer, so no other route pays the memory cost and no ordinary
  * request body is held twice.
+ *
+ * Registration goes through the adapter's `useBodyParser` rather than Fastify's
+ * `addContentTypeParser` directly. Nest registers its own `application/json`
+ * parser while the application initialises, and Fastify permits exactly one per
+ * content type; adding ours behind its back made the process die at boot with
+ * `FST_ERR_CTP_ALREADY_PRESENT`. `useBodyParser` marks the parser as registered
+ * so Nest installs no second one.
  */
 export const RAW_BODY_ROUTE_SEGMENT = '/webhooks/';
 
@@ -30,11 +37,33 @@ export function isRawBodyRoute(url: string): boolean {
 }
 
 export function configureRawBody(app: NestFastifyApplication): void {
-  const instance = app.getHttpAdapter().getInstance();
+  // `getHttpAdapter()` is declared as the generic `HttpServer`, on which the
+  // Fastify-specific members are optional; this application always runs on the
+  // Fastify adapter.
+  const adapter = app.getHttpAdapter() as FastifyAdapter;
+  const instance = adapter.getInstance();
+  const { bodyLimit, onProtoPoisoning, onConstructorPoisoning } = instance.initialConfig;
 
-  instance.addContentTypeParser(
+  // Fastify's own parser, not `JSON.parse`: it rejects `__proto__` and
+  // `constructor` payloads, which a bare parse would happily accept. The
+  // property is optional on the type, so a missing one is a hard failure at
+  // boot rather than a silent downgrade to an unsafe parse.
+  if (typeof instance.getDefaultJsonParser !== 'function') {
+    throw new TypeError('Fastify instance exposes no default JSON parser');
+  }
+  const parseJson = instance.getDefaultJsonParser(
+    onProtoPoisoning ?? 'error',
+    onConstructorPoisoning ?? 'error',
+  );
+
+  // `rawBody: false` — Nest would attach `req.rawBody` on every route; the
+  // callback below attaches it only for webhook routes.
+  adapter.useBodyParser(
     'application/json',
-    { parseAs: 'buffer' },
+    false,
+    // Inherit the adapter's configured limit; omit the key entirely when unset
+    // so Fastify applies its own default rather than receiving `undefined`.
+    bodyLimit === undefined ? {} : { bodyLimit },
     (
       request: FastifyRequest,
       body: Buffer,
@@ -48,9 +77,14 @@ export function configureRawBody(app: NestFastifyApplication): void {
         done(null, null);
         return;
       }
-      try {
-        done(null, JSON.parse(body.toString('utf8')));
-      } catch {
+
+      // The default parser is typed for a string body; Nest's own JSON parser
+      // decodes the buffer the same way before delegating.
+      parseJson(request, body.toString('utf8'), (error: Error | null, parsed?: unknown) => {
+        if (!error) {
+          done(null, parsed);
+          return;
+        }
         // Never echo the body in the error: it may carry provider data, and the
         // sender already knows what it sent.
         //
@@ -58,11 +92,8 @@ export function configureRawBody(app: NestFastifyApplication): void {
         // a content-type parser as a 500 unless told otherwise, and malformed
         // input from a caller is a client error — reporting it as a server
         // fault would page an on-call engineer for someone else's bad request.
-        const error = Object.assign(new SyntaxError('Request body is not valid JSON'), {
-          statusCode: 400,
-        });
-        done(error);
-      }
+        done(Object.assign(new SyntaxError('Request body is not valid JSON'), { statusCode: 400 }));
+      });
     },
   );
 }

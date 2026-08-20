@@ -1,30 +1,50 @@
-import Fastify from 'fastify';
+import { All, Controller, Module, Post, Req, Res } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { configureRawBody, isRawBodyRoute } from '../src/bootstrap/raw-body.bootstrap.js';
 import { verifyMonnifySignature } from '../src/modules/webhooks/domain/monnify-signature.js';
 
 const SECRET = 'e2e-secret';
 
-async function buildServer() {
-  const app = Fastify();
-  // Exercise the real parser exactly as app.bootstrap.ts installs it.
-  configureRawBody({ getHttpAdapter: () => ({ getInstance: () => app }) } as never);
-
-  app.post('/api/v1/webhooks/monnify/transaction-completion', async (request, reply) => {
+@Controller()
+class HarnessController {
+  @Post('api/v1/webhooks/monnify/transaction-completion')
+  webhook(@Req() request: FastifyRequest, @Res() reply: FastifyReply): void {
     const header = request.headers['monnify-signature'];
     const supplied = Array.isArray(header) ? header[0] : header;
-    const raw = (request as { rawBody?: Buffer }).rawBody;
+    const raw = request.rawBody;
     if (!raw || !verifyMonnifySignature(raw, supplied, SECRET)) {
-      return reply.code(401).send({ error: 'invalid signature' });
+      void reply.code(401).send({ error: 'invalid signature' });
+      return;
     }
-    return reply.code(200).send({ received: true, parsed: request.body });
-  });
+    void reply.code(200).send({ received: true, parsed: request.body });
+  }
 
-  app.post('/api/v1/auth/login', async (request, reply) =>
-    reply.send({ hasRawBody: Boolean((request as { rawBody?: Buffer }).rawBody) }),
+  @All('api/v1/auth/login')
+  login(@Req() request: FastifyRequest, @Res() reply: FastifyReply): void {
+    void reply.send({ hasRawBody: Boolean(request.rawBody) });
+  }
+}
+
+@Module({ controllers: [HarnessController] })
+class HarnessModule {}
+
+async function buildServer(): Promise<NestFastifyApplication> {
+  // A real Nest application on the real Fastify adapter. A bare Fastify
+  // instance would not register Nest's own JSON parser, and so would not
+  // reproduce the FST_ERR_CTP_ALREADY_PRESENT collision that took the
+  // deployed process down at boot.
+  const app = await NestFactory.create<NestFastifyApplication>(
+    HarnessModule,
+    new FastifyAdapter({ bodyLimit: 1_048_576 }),
+    { logger: false },
   );
-
-  await app.ready();
+  configureRawBody(app);
+  // `init()` runs the parser registration that previously threw.
+  await app.init();
+  await app.getHttpAdapter().getInstance().ready();
   return app;
 }
 
@@ -37,11 +57,11 @@ async function buildServer() {
  * untouched. This test caught malformed JSON being reported as 500 rather
  * than 400.
  *
- * No database is needed: the route stands in for the controller, and the
+ * No database is needed: the controller stands in for the real one, and the
  * parser and verifier under test are the production ones.
  */
 describe('webhook over real HTTP', () => {
-  let app: Awaited<ReturnType<typeof buildServer>>;
+  let app: NestFastifyApplication;
   beforeAll(async () => {
     app = await buildServer();
   });
@@ -129,5 +149,31 @@ describe('webhook over real HTTP', () => {
 
   it('scopes raw-body capture by path, not query string', () => {
     expect(isRawBodyRoute('/api/v1/auth/login?r=/webhooks/monnify')).toBe(false);
+  });
+
+  // Regression: the parser was registered with Fastify directly, so Nest then
+  // tried to add a second `application/json` parser and the process died at
+  // boot with FST_ERR_CTP_ALREADY_PRESENT. Booting a second app proves
+  // registration is idempotent from Nest's point of view.
+  it('boots without colliding with the parser Nest registers', async () => {
+    const second = await buildServer();
+    await second.close();
+  });
+
+  // Fastify's default parser refuses prototype-poisoning payloads; a bare
+  // JSON.parse would accept them.
+  it('rejects a prototype-poisoning payload', async () => {
+    const poison = '{"__proto__":{"admin":true}}';
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/webhooks/monnify/transaction-completion',
+      headers: {
+        'content-type': 'application/json',
+        'monnify-signature': createHmac('sha512', SECRET).update(poison).digest('hex'),
+      },
+      payload: poison,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(({} as Record<string, unknown>).admin).toBeUndefined();
   });
 });
