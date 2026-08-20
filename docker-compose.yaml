@@ -71,9 +71,9 @@ services:
       MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
       MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
       # Webhook ingestion; requires MONNIFY_WEBHOOK_SECRET when true (ADR-006).
-      MONNIFY_WEBHOOKS_ENABLED: ${MONNIFY_WEBHOOKS_ENABLED:-false}
+      MONNIFY_WEBHOOKS_ENABLED: ${MONNIFY_WEBHOOKS_ENABLED:-true}
       # Sandbox KYC fallback for test keys. Refused when NODE_ENV=production.
-      KYC_SANDBOX_FALLBACK: ${KYC_SANDBOX_FALLBACK:-false}
+      KYC_SANDBOX_FALLBACK: ${KYC_SANDBOX_FALLBACK:-true}
 
       # Document uploads (S3)
       AWS_REGION: ${AWS_REGION:-}
