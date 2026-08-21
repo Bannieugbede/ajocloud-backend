@@ -1,4 +1,31 @@
 services:
+  # Applies reviewed migrations, then exits. The API waits for it to succeed, so
+  # a failed migration stops the release instead of starting code against a
+  # schema it does not match.
+  #
+  # This is a distinct release step, not a startup hook: the API image never
+  # migrates its own database (see docs/deployment.md). It runs `migrate deploy`,
+  # which only applies committed migration files — it never generates one, never
+  # resets, and never seeds.
+  #
+  # It exists because the database is reachable only on Coolify's private
+  # network; running the migration from a workstation is not possible.
+  #
+  # Removing this service does not make a deployment safer — it only removes the
+  # check. The API then starts against whatever schema happens to be there, and
+  # the failure resurfaces as a 500 on the first query instead of a clear
+  # migration error at deploy time.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: 'no'
+    command: ['node', 'scripts/migrate-deploy.mjs']
+    networks:
+      - default
+      - coolify
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
 
   api:
     build:
@@ -8,6 +35,16 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      # `default` reaches rabbitmq, which is defined in this file. `coolify`
+      # reaches Postgres and Redis, which are separate Coolify resources on a
+      # network this project does not create. Without the second entry the
+      # internal hostnames in DATABASE_URL and REDIS_URL do not resolve, and
+      # every query fails while the process itself still starts.
+      - default
+      - coolify
     environment:
       # --- Routing (Coolify reads SERVICE_FQDN_API to issue TLS) -------------
       SERVICE_FQDN_API: ${API_DOMAIN}
@@ -109,6 +146,16 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+
+networks:
+  # Created by this project; carries traffic between the services defined here.
+  default:
+  # Pre-existing network owned by the Postgres and Redis resources. `external`
+  # means compose joins it rather than creating it, so the name must match the
+  # one Coolify shows on those resources.
+  coolify:
+    external: true
+    name: ${COOLIFY_NETWORK:-coolify}
 
 volumes:
   rabbitmq-data:
