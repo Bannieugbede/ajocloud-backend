@@ -15,11 +15,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: 'no'
-    command:
-      - node
-      - node_modules/prisma/build/index.js
-      - migrate
-      - deploy
+    command: ['node', 'scripts/migrate-deploy.mjs']
     environment:
       DATABASE_URL: ${DATABASE_URL}
 

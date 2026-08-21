@@ -6,6 +6,7 @@ RUN bun install --frozen-lockfile
 FROM dependencies AS build
 COPY tsconfig*.json nest-cli.json prisma.config.ts ./
 COPY prisma ./prisma
+COPY scripts ./scripts
 COPY src ./src
 RUN bun run prisma:generate && bun run build
 
@@ -19,6 +20,7 @@ COPY --from=build --chown=node:node /app/package.json ./package.json
 # container (Coolify pre-deploy command).
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build --chown=node:node /app/scripts ./scripts
 USER node
 EXPOSE 3000
 CMD ["node", "dist/src/main.js"]
