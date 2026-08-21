@@ -60,7 +60,7 @@ export const environmentSchema = z
     GOOGLE_CLIENT_ID: blankAsUndefined(z.string().min(1)),
     GOOGLE_CLIENT_SECRET: blankAsUndefined(z.string().min(1)),
     // Absolute callback URL registered in the Google console, e.g.
-    // https://api.mirumversal.com/api/v1/auth/google/callback
+    // https://api.ajocloud.com/api/v1/auth/google/callback
     GOOGLE_CALLBACK_URL: blankAsUndefined(z.url()),
     // Where the browser lands after a successful web sign-in.
     GOOGLE_WEB_SUCCESS_URL: blankAsUndefined(z.url()),
