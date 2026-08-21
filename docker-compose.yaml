@@ -1,23 +1,4 @@
 services:
-  # Applies reviewed migrations, then exits. The API waits for it to succeed, so
-  # a failed migration stops the release instead of starting code against a
-  # schema it does not match.
-  #
-  # This is a distinct release step, not a startup hook: the API image never
-  # migrates its own database (see docs/deployment.md). It runs `migrate deploy`,
-  # which only applies committed migration files — it never generates one, never
-  # resets, and never seeds.
-  #
-  # It exists because the database is reachable only on Coolify's private
-  # network; running the migration from a workstation is not possible.
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: 'no'
-    command: ['node', 'scripts/migrate-deploy.mjs']
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
 
   api:
     build:
@@ -27,8 +8,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     environment:
       # --- Routing (Coolify reads SERVICE_FQDN_API to issue TLS) -------------
       SERVICE_FQDN_API: ${API_DOMAIN}
