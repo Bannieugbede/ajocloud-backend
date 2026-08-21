@@ -51,10 +51,19 @@ export function configureRawBody(app: NestFastifyApplication): void {
   if (typeof instance.getDefaultJsonParser !== 'function') {
     throw new TypeError('Fastify instance exposes no default JSON parser');
   }
+  // `FastifyBodyParser` is a union of a callback form returning `void` and a
+  // promise form returning `Promise<any>`. Passing a `done` callback selects the
+  // callback form, but the union hides that from the compiler, which then reads
+  // the result as a possibly-floating promise. Narrowing to the overload that is
+  // actually invoked keeps the call honestly typed instead of silencing it.
   const parseJson = instance.getDefaultJsonParser(
     onProtoPoisoning ?? 'error',
     onConstructorPoisoning ?? 'error',
-  );
+  ) as (
+    request: FastifyRequest,
+    body: string,
+    done: (error: Error | null, result?: unknown) => void,
+  ) => void;
 
   // `rawBody: false` — Nest would attach `req.rawBody` on every route; the
   // callback below attaches it only for webhook routes.
