@@ -26,6 +26,8 @@ model User {
   bankAccounts           LinkedBankAccount[]
   staffInvitesSent       StaffInvite[]                  @relation("StaffInvitesSent")
   staffInviteAccepted    StaffInvite[]                  @relation("StaffInviteAccepted")
+  adminNotifications     AdminNotification[]            @relation("AdminNotificationTarget")
+  adminNotificationReads AdminNotificationRead[]
 
   @@index([status, createdAt])
   @@map("users")

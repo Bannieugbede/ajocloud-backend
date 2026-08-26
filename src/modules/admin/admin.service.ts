@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AjoCycleStatus,
   AjoGroupStatus,
@@ -11,6 +11,7 @@ import {
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { AdminListQueryDto } from './dto/admin-query.dto.js';
+import type { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 const ACTIVE_GROUP_STATUSES = [AjoGroupStatus.LOCKED, AjoGroupStatus.ACTIVE, AjoGroupStatus.OPEN];
 
@@ -114,6 +115,80 @@ export class AdminService {
       roles: user.roleAssignments.map((assignment) => assignment.role.name),
       permissions,
     };
+  }
+
+  /** The signed-in staff member's own profile, for the profile page. */
+  async profile(userId: string): Promise<unknown> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        emailVerifiedAt: true,
+        phoneVerifiedAt: true,
+        createdAt: true,
+        lastLoginAt: true,
+        profile: true,
+        roleAssignments: { select: { role: { select: { name: true } } } },
+      },
+    });
+    if (!user) throw new NotFoundException('User was not found');
+    const { roleAssignments, ...rest } = user;
+    return { ...rest, roles: roleAssignments.map((assignment) => assignment.role.name) };
+  }
+
+  /**
+   * Updates the signed-in staff member's own profile. Only the fields the DTO
+   * allows are written, and a profile row is created if the account somehow
+   * lacks one, so the page never fails on an incomplete account.
+   */
+  async updateProfile(userId: string, input: UpdateProfileDto): Promise<unknown> {
+    const { phone, ...profileFields } = input;
+
+    // Undefined means "not submitted"; only write what was actually sent.
+    const data = Object.fromEntries(
+      Object.entries(profileFields).filter(([, value]) => value !== undefined),
+    );
+
+    if (phone !== undefined) {
+      const clash = await this.prisma.user.findFirst({
+        where: { phone, NOT: { id: userId } },
+        select: { id: true },
+      });
+      if (clash) throw new ConflictException('That phone number is already in use.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (phone !== undefined) {
+        // A changed number is unverified until it is confirmed again.
+        const current = await tx.user.findUnique({
+          where: { id: userId },
+          select: { phone: true },
+        });
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            phone,
+            ...(current?.phone !== phone ? { phoneVerifiedAt: null } : {}),
+          },
+        });
+      }
+      if (Object.keys(data).length > 0) {
+        await tx.userProfile.upsert({
+          where: { userId },
+          update: data,
+          create: {
+            userId,
+            firstName: data.firstName ?? '',
+            lastName: data.lastName ?? '',
+            ...data,
+          },
+        });
+      }
+    });
+
+    return this.profile(userId);
   }
 
   /**

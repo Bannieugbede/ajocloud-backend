@@ -71,9 +71,11 @@ export class AccessTokenGuard implements CanActivate {
       const permissions = session.user.roleAssignments.flatMap((assignment) =>
         assignment.role.permissions.map((entry) => entry.permission.key),
       );
+      const roles = session.user.roleAssignments.map((assignment) => assignment.role.name);
       request.user = {
         userId: claims.sub,
         sessionId: claims.sid,
+        roles: [...new Set(roles)],
         permissions: [...new Set(permissions)],
       };
       return true;

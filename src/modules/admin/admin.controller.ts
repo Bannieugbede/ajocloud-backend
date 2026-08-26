@@ -1,4 +1,13 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -7,6 +16,7 @@ import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { PermissionsGuard } from '../permissions/permissions.guard.js';
 import { AdminService } from './admin.service.js';
 import { AdminListQueryDto } from './dto/admin-query.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -36,6 +46,17 @@ export class AdminController {
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.admin.currentUser(user.userId, user.permissions);
+  }
+
+  /** The signed-in staff member's own profile — no permission: it is their own. */
+  @Get('profile')
+  profile(@CurrentUser() user: AuthenticatedUser) {
+    return this.admin.profile(user.userId);
+  }
+
+  @Patch('profile')
+  updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProfileDto) {
+    return this.admin.updateProfile(user.userId, dto);
   }
 
   @Get('users')
