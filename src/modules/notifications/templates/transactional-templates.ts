@@ -15,6 +15,7 @@ export type EmailTemplateKey =
   | 'ajo-contribution-missed'
   | 'ajo-payout-sent'
   | 'ajo-group-invite'
+  | 'staff-invite'
   | 'food-distribution-ready'
   | 'akawo-goal-progress'
   | 'akawo-goal-reached'
@@ -273,6 +274,19 @@ const emailDefinitions: Record<EmailTemplateKey, EmailDefinition> = {
       required(variables, 'inviteUrl'),
       `Contribution: ${required(variables, 'amount')} · ${required(variables, 'frequency')}`,
       'Only join groups run by people you trust. Ajo Cloud does not guarantee contributions between members.',
+    );
+  },
+  'staff-invite': (variables) => {
+    const inviterName = required(variables, 'inviterName');
+    const roleName = required(variables, 'roleName');
+    return actionEmail(
+      'You have been invited to the Ajo Cloud admin console',
+      'Set up your Ajo Cloud staff account',
+      `${inviterName} invited you to the admin console`,
+      'Accept invitation',
+      required(variables, 'inviteUrl'),
+      `You will join as ${roleName}. This link expires in ${required(variables, 'expiresHours')} hours and can only be used once.`,
+      'If you were not expecting this invitation, ignore this email and tell your administrator. The link cannot be used by anyone who does not open it.',
     );
   },
   'food-distribution-ready': (variables) => {

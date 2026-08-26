@@ -40,6 +40,9 @@ import { AccessTokenGuard } from './guards/access-token.guard.js';
 import { TransactionPinService } from './transaction-pin.service.js';
 import { SetTransactionPinDto, VerifyTransactionPinDto } from './dto/transaction-pin.dto.js';
 import { ResendVerificationDto, VerifyAccountDto } from './dto/verify-account.dto.js';
+import { PublicEndpoint } from '../../common/decorators/public-endpoint.decorator.js';
+import { AcceptStaffInviteDto } from '../admin/dto/staff-invite.dto.js';
+import { StaffInviteService } from '../admin/staff/staff-invite.service.js';
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
@@ -50,6 +53,7 @@ export class AuthController {
     private readonly google: GoogleOAuthService,
     private readonly passwordReset: PasswordResetService,
     private readonly transactionPin: TransactionPinService,
+    private readonly staffInvites: StaffInviteService,
     private readonly config: ConfigService<Environment, true>,
   ) {}
 
@@ -230,6 +234,38 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async completePasswordReset(@Body() dto: CompletePasswordResetDto): Promise<void> {
     await this.passwordReset.completeReset(dto.challengeId, dto.code, dto.password);
+  }
+
+  /**
+   * Describes a staff invitation to the accept page. Unauthenticated by
+   * necessity: the invitee has no account until they redeem the link.
+   */
+  @Get('staff-invite')
+  @PublicEndpoint()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  previewStaffInvite(@Query('token') token: string | undefined) {
+    if (!token) throw new UnauthorizedException('This invitation link is invalid');
+    return this.staffInvites.preview(token);
+  }
+
+  /**
+   * Redeems a staff invitation and signs the new staff member straight in, so
+   * they land in the console rather than at a second sign-in prompt.
+   */
+  @Post('staff-invite/accept')
+  @PublicEndpoint()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async acceptStaffInvite(
+    @Body() dto: AcceptStaffInviteDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const { userId } = await this.staffInvites.accept(dto.token, dto.password);
+    return this.issueSession(
+      reply,
+      await this.auth.createSessionForUser(userId, this.context(request)),
+    );
   }
 
   @Get('transaction-pin')

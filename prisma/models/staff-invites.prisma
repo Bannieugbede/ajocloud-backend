@@ -1,0 +1,44 @@
+/// An invitation for a person to join the admin console as staff.
+///
+/// The emailed link carries a high-entropy token that is never stored: only an
+/// HMAC digest is kept, so a leaked database cannot be used to accept an
+/// outstanding invite. The role is fixed at invite time and re-checked on
+/// acceptance, so widening it requires issuing a new invite.
+model StaffInvite {
+  id        String            @id @default(uuid()) @db.Uuid
+  email     String            @db.VarChar(320)
+  firstName String            @db.VarChar(100)
+  lastName  String            @db.VarChar(100)
+  roleId    String            @db.Uuid
+  /// HMAC-SHA256 of the emailed token, peppered with TOKEN_PEPPER.
+  tokenHash String            @unique @db.VarChar(128)
+  status    StaffInviteStatus @default(PENDING)
+
+  /// Staff member who sent the invite, retained for the audit trail.
+  invitedById    String    @db.Uuid
+  expiresAt      DateTime  @db.Timestamptz(6)
+  acceptedAt     DateTime? @db.Timestamptz(6)
+  revokedAt      DateTime? @db.Timestamptz(6)
+  /// Set once accepted, linking the invite to the account it created.
+  acceptedUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  role         Role  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  invitedBy    User  @relation("StaffInvitesSent", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedUser User? @relation("StaffInviteAccepted", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+
+  /// Only one invite per address may be outstanding; enforced in the service,
+  /// since a partial unique index cannot be expressed here.
+  @@index([email, status])
+  @@index([status, expiresAt])
+  @@map("staff_invites")
+}
+
+enum StaffInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}

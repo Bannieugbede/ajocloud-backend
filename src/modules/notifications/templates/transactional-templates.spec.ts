@@ -31,6 +31,8 @@ const variables = {
   inviteUrl: 'https://example.com/invite?token=safe',
   frequency: 'Monthly',
   paidAt: '18 July 2026 at 09:30 WAT',
+  roleName: 'Support Officer',
+  expiresHours: '72',
 };
 
 describe('transactional templates', () => {

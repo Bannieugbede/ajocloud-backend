@@ -1,6 +1,8 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
+import { PUBLIC_ENDPOINT_KEY } from '../../../common/decorators/public-endpoint.decorator.js';
 import { ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER, readCookie } from '../session-cookie.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -16,13 +18,25 @@ function safeEqual(a: string, b: string): boolean {
  *
  * Bearer callers (mobile) are exempt: an attacker's page cannot set an
  * Authorization header cross-origin, so those requests are not forgeable the
- * way ambient cookies are.
+ * way ambient cookies are. Routes marked `@PublicEndpoint()` are exempt too —
+ * they never read the session cookie, so a visitor who is signed in elsewhere
+ * on the domain must not be blocked from a public form.
  */
 @Injectable()
 export class CsrfGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     if (SAFE_METHODS.has(request.method)) return true;
+    if (
+      this.reflector.getAllAndOverride<boolean>(PUBLIC_ENDPOINT_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      return true;
+    }
     // No session cookie means this cannot be an ambient-credential request.
     if (!readCookie(request, ACCESS_COOKIE)) return true;
 

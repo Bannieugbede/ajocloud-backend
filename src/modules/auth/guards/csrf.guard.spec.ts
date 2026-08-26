@@ -1,13 +1,22 @@
 import { ForbiddenException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { CsrfGuard } from './csrf.guard.js';
 import { ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER } from '../session-cookie.js';
 
 const context = (request: unknown): ExecutionContext =>
-  ({ switchToHttp: () => ({ getRequest: () => request }) }) as ExecutionContext;
+  ({
+    switchToHttp: () => ({ getRequest: () => request }),
+    getHandler: () => undefined,
+    getClass: () => undefined,
+  }) as unknown as ExecutionContext;
+
+/** A Reflector that reports every route as public, or none of them. */
+const reflector = (isPublic: boolean): Reflector =>
+  ({ getAllAndOverride: () => isPublic }) as unknown as Reflector;
 
 describe('CsrfGuard', () => {
-  const guard = new CsrfGuard();
+  const guard = new CsrfGuard(reflector(false));
 
   it('allows safe methods without a token', () => {
     expect(guard.canActivate(context({ method: 'GET', headers: {}, cookies: {} }))).toBe(true);
@@ -46,6 +55,19 @@ describe('CsrfGuard', () => {
       cookies: {},
     };
     expect(guard.canActivate(context(request))).toBe(true);
+  });
+
+  it('exempts a @PublicEndpoint() route from the check', () => {
+    // A visitor signed in elsewhere on the domain carries the session cookie on
+    // a public form post that never reads it. Without this exemption the
+    // waitlist rejects exactly the people who already have an account.
+    const publicGuard = new CsrfGuard(reflector(true));
+    const request = {
+      method: 'POST',
+      headers: {},
+      cookies: { [ACCESS_COOKIE]: 'jwt', [CSRF_COOKIE]: 'token-value' },
+    };
+    expect(publicGuard.canActivate(context(request))).toBe(true);
   });
 
   it('rejects a mismatched token', () => {

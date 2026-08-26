@@ -95,3 +95,25 @@ the masked value, result, and provider reference — per docs/kyc.md.
 
 The production database remains unreachable (`/health/ready` returns 503), so none of this has been
 exercised against the deployed API, and the requested seeding still cannot run.
+
+## 2026-08-26 — Waitlist outcomes and staff invitations
+
+The public waitlist no longer reports an error to someone already on the list: the API returns
+`JOINED` or `ALREADY_JOINED` and the web form confirms the existing place. Two real faults were
+behind the reports — `CsrfGuard` rejected the public POST whenever the visitor happened to hold a
+session cookie for the same domain, and the client discarded the API's error envelope, so
+validation, rate-limit, and offline failures all rendered as one generic string. Both are fixed;
+public routes now opt out of CSRF explicitly via `@PublicEndpoint()`.
+
+Staff invitations are implemented end to end: invite and revoke from `/admin/staff` behind a new
+`staff.manage` permission, a 72-hour emailed link storing only the token's HMAC digest, and an
+acceptance page that creates the account with its role and signs the person in. `SUPER_ADMIN` is
+deliberately not invitable over email.
+
+`bun run check` passed: Prisma validation/generation, formatting, lint, strict typecheck, 312 unit
+tests across 44 suites, and build. The web app passes typecheck, lint, and build.
+
+Not yet verified against a live database: Docker is unavailable in this environment, so
+`20260826120000_staff_invites` has not been applied and the invite flow has not been exercised
+against Postgres. Before the Staff page works in a deployed environment, set `ADMIN_WEB_URL` and
+re-run the seed so `staff.manage` exists and is attached to the admin roles.

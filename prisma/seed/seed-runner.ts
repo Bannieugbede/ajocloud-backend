@@ -40,6 +40,7 @@ const PERMISSIONS = [
   'fees.manage',
   'disputes.manage',
   'audit.read',
+  'staff.manage',
 ] as const;
 
 const ROLE_PERMISSIONS: Record<string, readonly string[]> = {

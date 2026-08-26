@@ -4,6 +4,18 @@
 
 ### Changed
 
+- Joining the waitlist is now reported as a success when the address is already
+  on the list. `POST /api/v1/engagement/waitlist` answers 200 with
+  `status: JOINED | ALREADY_JOINED` and the original `joinedAt`, so the web form
+  can confirm the existing place instead of showing an error. Repeat submissions
+  refresh the contact details without moving the person's position.
+- Public engagement endpoints are exempt from the double-submit CSRF check via a
+  new `@PublicEndpoint()` decorator. They read no session cookie, so a visitor
+  who happened to be signed in on the same domain was being rejected with a 403
+  on a form that never used their session.
+- Waitlist and support validation messages are now written for the person who
+  filled in the form, since the web client renders whatever the API returns.
+
 - Malformed JSON now returns 400 instead of 500. Fastify treats an error thrown
   from a content-type parser as a server fault unless given a status code.
 
@@ -13,6 +25,15 @@
   collects Privacy Policy consent only, recorded against an explicit policy version.
 
 ### Added
+
+- Staff invitations for the admin console. `POST /api/v1/admin/staff/invites`
+  (permission `staff.manage`) emails a colleague a one-time link; the invitee
+  sets a password at `POST /api/v1/auth/staff-invite/accept` and is signed
+  straight in with the invited role already assigned. Invites expire after 72
+  hours, can be revoked, and are listed at `GET /api/v1/admin/staff/invites`.
+  Only the token's HMAC digest is stored, so an outstanding invite cannot be
+  redeemed by reading the database, and `SUPER_ADMIN` is deliberately not
+  invitable over email. Requires `ADMIN_WEB_URL` to build the link.
 
 - Monnify webhook ingestion at `POST /api/v1/webhooks/monnify/*`, one route per
   dashboard callback: transaction completion, refund completion, disbursement,

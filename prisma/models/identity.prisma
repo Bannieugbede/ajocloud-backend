@@ -24,6 +24,8 @@ model User {
   identities             UserIdentity[]
   transactionPin         TransactionPin?
   bankAccounts           LinkedBankAccount[]
+  staffInvitesSent       StaffInvite[]                  @relation("StaffInvitesSent")
+  staffInviteAccepted    StaffInvite[]                  @relation("StaffInviteAccepted")
 
   @@index([status, createdAt])
   @@map("users")

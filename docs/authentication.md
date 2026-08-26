@@ -20,7 +20,21 @@ Refresh tokens rotate once. Reuse or a token-family mismatch marks the session c
 The selected email adapter sends account verification and the welcome message through Resend
 transactional email. Every attempt is persisted with a deterministic dedupe key and provider message
 ID. Raw codes exist only during rendering/provider dispatch and are never stored in notification
-payloads or logs. Password-reset templates exist, but password recovery, MFA, and device-management
-endpoints are not yet implemented.
+payloads or logs. Password recovery is implemented as a code-based challenge: the request endpoint
+always returns an identically shaped challenge so it cannot enumerate accounts, and completing a
+reset revokes every active session, since a reset is the remedy for a possibly compromised account.
+MFA and device-management endpoints are not yet implemented.
+
+Staff accounts are not self-registered. An administrator holding `staff.manage` issues an
+invitation, which emails a one-time link built from `ADMIN_WEB_URL`. Only an HMAC-SHA256 digest of
+the invitation token is stored, so an outstanding invite cannot be redeemed from a database dump.
+Invitations expire after 72 hours, may be revoked, and are superseded by a newer invite to the same
+address; a partial unique index keeps at most one pending invite per address. Accepting sets a
+password under the registration policy and creates the user, credential, profile, and role
+assignment in one serializable transaction, then issues a session — the invite is re-read inside
+that transaction so a link opened twice cannot create two accounts. Redeeming a link delivered to
+the mailbox is treated as proof of email ownership, exactly as a password reset is, so the account
+starts `ACTIVE`. Invitation lookup and acceptance report every failure identically, so a guessed
+token cannot distinguish a revoked invitation from one that never existed.
 
 Registration is Tier 1 account creation, not full KYC. Transaction and product limits are enforced independently through the progressive KYC policy; higher-risk actions may require step-up verification.
