@@ -67,7 +67,12 @@ export const environmentSchema = z
     // Mobile deep link, e.g. ajocloud://auth/google. Only these two targets are
     // ever redirected to, so the callback cannot be pointed at an open redirect.
     GOOGLE_MOBILE_SUCCESS_URL: blankAsUndefined(z.string().min(1)),
-    // Base URL of the admin console, used to build staff invitation links.
+    // Origin of the web app, used to build staff invitation links. This is the
+    // site root (https://example.com), NOT the console path: the invite page is
+    // deliberately served outside /admin, since that layout bounces anyone
+    // without a session — which is every invitee until they accept. A trailing
+    // "/admin" is stripped rather than trusted, because naming this the "admin
+    // console URL" has already led to it being set that way in production.
     // Defaults to the local Next.js dev server so invites work out of the box.
     ADMIN_WEB_URL: z.url().default('http://localhost:3001'),
     DEFAULT_CURRENCY: z

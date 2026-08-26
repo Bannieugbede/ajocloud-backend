@@ -10,9 +10,10 @@ const ROLE = { id: 'role-1', name: 'SUPPORT_OFFICER' };
 
 const digest = (token: string): string => createHmac('sha256', PEPPER).update(token).digest('hex');
 
-const config = {
-  get: (key: string) => (key === 'TOKEN_PEPPER' ? PEPPER : 'https://admin.ajocloud.com'),
-};
+const configWith = (adminWebUrl = 'https://ajocloud.com') => ({
+  get: (key: string) => (key === 'TOKEN_PEPPER' ? PEPPER : adminWebUrl),
+});
+const config = configWith();
 
 interface InviteRow {
   id: string;
@@ -52,6 +53,7 @@ function build(
     invite?: InviteRow | null;
     existingUser?: { id: string } | null;
     role?: { id: string; name: string } | null;
+    config?: { get: (key: string) => string };
   } = {},
 ) {
   const tx = {
@@ -92,7 +94,7 @@ function build(
     prisma as never,
     transactions as never,
     notifications as never,
-    config as never,
+    (options.config ?? config) as never,
   );
   return { service, prisma, tx, notifications };
 }
@@ -120,6 +122,32 @@ describe('StaffInviteService.invite', () => {
     expect(created.data.tokenHash).toBe(digest(token as string));
     expect(created.data.tokenHash).not.toBe(token);
   });
+
+  it('points the link at the invite page, which lives outside /admin', async () => {
+    const { service, notifications } = build();
+    await service.invite(dto, INVITER);
+    const [[emailed]] = notifications.sendEmail.mock.calls as [
+      [{ variables: { inviteUrl: string } }],
+    ];
+    expect(new URL(emailed.variables.inviteUrl).pathname).toBe('/invite');
+  });
+
+  // ADMIN_WEB_URL was set to the console path in production, which sent every
+  // invitee to /admin/invite — a 404, on a link that cannot be re-sent without
+  // revoking the invite first.
+  it.each(['https://ajocloud.com/admin', 'https://ajocloud.com/admin/', 'https://ajocloud.com/'])(
+    'tolerates ADMIN_WEB_URL set to %s',
+    async (adminWebUrl) => {
+      const { service, notifications } = build({ config: configWith(adminWebUrl) });
+      await service.invite(dto, INVITER);
+      const [[emailed]] = notifications.sendEmail.mock.calls as [
+        [{ variables: { inviteUrl: string } }],
+      ];
+      const url = new URL(emailed.variables.inviteUrl);
+      expect(url.pathname).toBe('/invite');
+      expect(url.origin).toBe('https://ajocloud.com');
+    },
+  );
 
   it('normalises the address so invites cannot be duplicated by casing', async () => {
     const { service, tx } = build();

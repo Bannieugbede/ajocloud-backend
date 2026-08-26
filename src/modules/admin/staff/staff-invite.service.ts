@@ -60,7 +60,13 @@ export class StaffInviteService {
     config: ConfigService<Environment, true>,
   ) {
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
-    this.adminWebUrl = config.get('ADMIN_WEB_URL', { infer: true }).replace(/\/$/, '');
+    // The invite page lives at the site root, not under /admin. Tolerate a
+    // value that points at the console anyway: a stray "/admin" here produces
+    // a 404 link in an email that cannot be re-sent without revoking first.
+    this.adminWebUrl = config
+      .get('ADMIN_WEB_URL', { infer: true })
+      .replace(/\/+$/, '')
+      .replace(/\/admin$/, '');
   }
 
   /**
