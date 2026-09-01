@@ -43,7 +43,7 @@ Use `bun run check` for non-destructive verification. Other verified commands ar
 - [current status](docs/progress/current-status.md), [implementation log](docs/progress/implementation-log.md)
 - [ADR index](docs/adr/README.md), [open Ajo financial rules](docs/open-questions/ajo-financial-rules.md)
 - [Bill Payment](docs/bill-payments.md), [progressive KYC](docs/kyc.md), [Food Ajo](docs/food-ajo.md), [Akawo](docs/akawo.md), and [referrals](docs/referrals.md)
-- [Flexible Ajo questions](docs/open-questions/flexible-ajo-contribution-rules.md), [referral qualification](docs/open-questions/referral-qualification-rule.md), and [email provider selection](docs/open-questions/email-provider-selection.md)
+- [Flexible Ajo questions](docs/open-questions/flexible-ajo-contribution-rules.md), [referral qualification](docs/open-questions/referral-qualification-rule.md), [platform fee model](docs/open-questions/platform-fee-model.md), and [email provider selection](docs/open-questions/email-provider-selection.md)
 
 ## Version control
 

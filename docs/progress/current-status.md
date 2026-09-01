@@ -1,6 +1,6 @@
 # Current status
 
-- Last updated: 2026-08-07
+- Last updated: 2026-09-01
 - Current phase: Financial-core hardening plus staged Traditional Ajo, Food Coordinator, and Bill Payment delivery, with an admin read API layer serving the web admin dashboard
 
 ## Complete
@@ -37,7 +37,28 @@ deposits remain outstanding.
 
 ## Blocked
 
-The real Monnify Bill Payment adapter/webhook remains blocked by absent verified provider contracts. Monnify is now the single payments, verification, and payout provider (ADR-005); its identity adapter is implemented but its endpoint paths are unconfirmed against a live account. Multiple Ajo payout recipients/default handling, the ambiguous referral “#5” rule, and production fee limits require product/compliance decisions. Brevo production approval still requires compliance, sender-domain/SMS Sender ID, and webhook decisions. Docker is unavailable, but PostgreSQL 18 from Postgres.app was used to apply both migrations and run transaction tests.
+The real Monnify Bill Payment adapter/webhook remains blocked by absent verified provider contracts. Monnify is now the single payments, verification, and payout provider (ADR-005); its identity adapter is implemented but its endpoint paths are unconfirmed against a live account. Multiple Ajo payout recipients/default handling and the ambiguous referral “#5” rule still require product/compliance decisions. The commercial fee model was decided on 2026-09-01 (pass-through charges; see “Fee model” below), but it is **not implementable against the current schema**: `FeeDefinition` supports only `FIXED` and `PERCENTAGE` with a min/max clamp, and the decided model is a step function over transaction bands. A tier concept and the inclusive/exclusive boundary wording must be settled before any fee code is written. Brevo production approval still requires compliance, sender-domain/SMS Sender ID, and webhook decisions. Docker is unavailable, but PostgreSQL 18 from Postgres.app was used to apply both migrations and run transaction tests.
+
+## Fee model (decided 2026-09-01)
+
+Charges are passed to users. Withdrawals: +₦10 per withdrawal, plus ₦50 on transactions up to
+₦100,000. Deposits: ₦50 up to ₦10,000; ₦100 from ₦10,000; ₦150 from ₦200,000; ₦200 from
+₦500,000. All figures exclude Monnify's own charges.
+
+Two things block implementation:
+
+1. **The schema cannot express it.** `FeeDefinition` (`prisma/models/fees.prisma`) has
+   `calculationType` of `FIXED` or `PERCENTAGE` plus `minimumMinor`/`maximumMinor`. A banded step
+   function is neither. The recommended change is a `FeeTier` model
+   (`feeDefinitionId`, `fromMinor`, `toMinor`, `amountMinor`, ordered, validated non-overlapping and
+   gap-free) plus a `TIERED` calculation type, which preserves the existing versioning and the
+   rule-snapshot audit trail in `src/modules/fees/domain/fee-rule.ts`.
+2. **Band boundaries are ambiguous.** The source brief says “up to ₦10,000” and then “from
+   ₦10,000”, which overlap at exactly ₦10,000. Every boundary must be stated as inclusive or
+   exclusive before implementation; an off-by-one at a band edge is a money bug.
+
+There is currently no `FeesModule`, controller, service, or seeded definition — only the domain
+function and its spec.
 
 ## Next recommended tasks
 
