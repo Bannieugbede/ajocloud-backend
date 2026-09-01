@@ -21,7 +21,11 @@ import {
 } from '../../generated/prisma/enums.js';
 import { verificationCodeHash } from '../../src/modules/auth/domain/verification-policy.js';
 import { seedAdminDemo } from './seeders/admin-demo.js';
+import { seedAjoGovernance } from './seeders/ajo-governance.js';
 import { seedDashboardActivity } from './seeders/dashboard-activity.js';
+import { seedIdentityAndCompliance } from './seeders/identity-compliance.js';
+import { seedNotifications } from './seeders/notifications.js';
+import { seedReferrals } from './seeders/referrals.js';
 
 const PERMISSIONS = [
   'users.read',
@@ -449,6 +453,12 @@ export async function runSeed(): Promise<void> {
 
     await seedAdminDemo(prisma);
     await seedDashboardActivity(prisma);
+    // These run last: each reads the users, groups, and profiles the seeders
+    // above create, and returns early rather than inventing them.
+    await seedAjoGovernance(prisma);
+    await seedIdentityAndCompliance(prisma);
+    await seedNotifications(prisma);
+    await seedReferrals(prisma);
   } finally {
     await prisma.$disconnect();
   }
