@@ -39,6 +39,13 @@ deposits remain outstanding.
 
 The real Monnify Bill Payment adapter/webhook remains blocked by absent verified provider contracts. Monnify is now the single payments, verification, and payout provider (ADR-005); its identity adapter is implemented but its endpoint paths are unconfirmed against a live account. Multiple Ajo payout recipients/default handling and the ambiguous referral “#5” rule still require product/compliance decisions. The commercial fee model was decided on 2026-09-01 (pass-through charges; see “Fee model” below), but it is **not implementable against the current schema**: `FeeDefinition` supports only `FIXED` and `PERCENTAGE` with a min/max clamp, and the decided model is a step function over transaction bands. A tier concept and the inclusive/exclusive boundary wording must be settled before any fee code is written. Brevo production approval still requires compliance, sender-domain/SMS Sender ID, and webhook decisions. Docker is unavailable, but PostgreSQL 18 from Postgres.app was used to apply both migrations and run transaction tests.
 
+Compliance officers can now decide a KYC profile: `GET /admin/kyc-profiles` and `/:id` for the queue
+and its evidence, plus approve, reject, request-information, and escalate, all behind `kyc.review`.
+Each decision is one serializable transaction that moves the profile, closes the open
+`ComplianceReview`, and writes an audit entry and outbox event. Approval refuses a tier the profile's
+passed checks do not evidence, and a settled profile cannot be silently re-decided. The admin console
+has no UI for these actions yet, so the endpoints currently have no caller.
+
 ## Fee model (decided 2026-09-01)
 
 Charges are passed to users. Withdrawals: +₦10 per withdrawal, plus ₦50 on transactions up to

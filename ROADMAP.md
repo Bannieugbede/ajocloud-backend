@@ -8,7 +8,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 1 Identity/security foundation |       8 |        7 |           0 |       0 |      87.5% |
 | 2 Financial core               |      11 |        5 |           0 |       0 |      45.5% |
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
-| 4 Administration               |       6 |        0 |           0 |       0 |         0% |
+| 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
 | 5 Food Ajo                     |      13 |        4 |           0 |       0 |      30.8% |
 | 6 Akawo                        |       7 |        3 |           1 |       0 |      42.9% |
 | 7 Bill Payment                 |      11 |        6 |           0 |       2 |      54.5% |
@@ -16,7 +16,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **122** |   **62** |       **2** |   **4** |  **50.8%** |
+| **Total**                      | **122** |   **63** |       **2** |   **4** |  **51.6%** |
 
 ## Phase 0 — Foundation
 
@@ -88,7 +88,12 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 
 - [ ] **NOT STARTED** Super-admin APIs
 - [ ] **NOT STARTED** Group-admin APIs beyond lifecycle/swaps
-- [ ] **NOT STARTED** General compliance review
+- [x] **COMPLETE** General compliance review — KYC decision workflow. `GET /admin/kyc-profiles`
+      (queue) and `/:id` (evidence), plus `POST /:id/{approve,reject,request-information,escalate}`,
+      all behind `kyc.review`. Each decision is one serializable transaction that moves the profile,
+      closes the open `ComplianceReview`, and writes an audit entry plus an outbox event. Approval
+      refuses a tier the profile's passed checks do not evidence, and a settled profile cannot be
+      silently re-decided. 18 tests.
 - [ ] **NOT STARTED** Transaction monitoring
 - [ ] **NOT STARTED** Disputes
 - [ ] **NOT STARTED** Reports
