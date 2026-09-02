@@ -1,10 +1,30 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { WalletsService } from './wallets.service.js';
+import { WalletMovementsService } from './wallet-movements.service.js';
+import { SendToWalletDto, WithdrawDto } from './dto/wallet-movement.dto.js';
+
+/** Rejects a missing or oversized key before any work is done. */
+function requireIdempotencyKey(key: string | undefined): string {
+  if (!key || key.length < 8 || key.length > 128) {
+    throw new BadRequestException('A valid Idempotency-Key header is required');
+  }
+  return key;
+}
 
 @ApiTags('wallets')
 @ApiBearerAuth()
@@ -14,6 +34,7 @@ export class WalletsController {
   constructor(
     private readonly wallets: WalletsService,
     private readonly payments: PaymentsService,
+    private readonly movements: WalletMovementsService,
   ) {}
   @Get()
   list(@CurrentUser() user: AuthenticatedUser) {
@@ -29,6 +50,35 @@ export class WalletsController {
   @Get('me/balance')
   balance(@CurrentUser() user: AuthenticatedUser) {
     return this.payments.balance(user.userId);
+  }
+
+  /** Sends money to another member's wallet. Settles immediately. */
+  @Post('send')
+  send(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: SendToWalletDto,
+  ) {
+    return this.movements.send(user.userId, dto, requireIdempotencyKey(idempotencyKey));
+  }
+
+  /**
+   * Requests a payout to a linked bank account. Reserves the funds and stops at
+   * PENDING: the bank rail is not operated here yet.
+   */
+  @Post('withdrawals')
+  withdraw(
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: WithdrawDto,
+  ) {
+    return this.movements.withdraw(user.userId, dto, requireIdempotencyKey(idempotencyKey));
+  }
+
+  /** The caller's transfers and withdrawals. Declared before ':walletId'. */
+  @Get('me/movements')
+  movements_(@CurrentUser() user: AuthenticatedUser) {
+    return this.movements.movements(user.userId);
   }
 
   @Get(':walletId/transactions')
