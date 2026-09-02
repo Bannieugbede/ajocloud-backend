@@ -4,6 +4,20 @@
 
 ### Added
 
+- **Money can now enter the platform.** A verified Monnify transaction-completion
+  webhook posts to the ledger: the provider account is debited gross, the
+  wallet is credited net of the platform fee, and fee revenue is credited
+  (ADR-010). Redelivery cannot credit twice — the ledger key is derived from the
+  payment intent, so even an event arriving under a new id is a no-op.
+- Platform fees are computed rather than always zero. Deposits are priced
+  cost-plus with a tiered markup floored at a percentage, so the platform never
+  sells below the provider's own charge and margin scales with the amount
+  (ADR-009). Band boundaries are half-open, and a tier set with a gap or an
+  overlap is refused rather than silently resolved.
+- Wallet top-up can be created: `POST /api/v1/payments/intents` accepts
+  `targetType: WALLET_TOPUP` with an `amountMinor`. This is the only target that
+  takes an amount from the client, because it is the only one with no row of its
+  own to read one from.
 - Members can see a group's swap requests at
   `GET /api/v1/ajo-groups/:groupId/swaps`, each reporting whether it awaits
   their own decision. Approve and reject already existed, but nothing listed a
@@ -37,6 +51,10 @@
   marked fulfilled until a delivery receipt has been recorded.
 
 ### Changed
+
+- The deposit pricing recorded on 2026-09-01 was superseded. Flat bands charged
+  less than the provider's own rate costs on any deposit above roughly ₦3,300,
+  so the platform lost more the larger the deposit. Pricing is now cost-plus.
 
 - Joining the waitlist is now reported as a success when the address is already
   on the list. `POST /api/v1/engagement/waitlist` answers 200 with

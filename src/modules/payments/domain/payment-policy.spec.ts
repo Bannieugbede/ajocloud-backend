@@ -1,7 +1,6 @@
 import {
   INTENT_TTL_MS,
   canPayFromWallet,
-  feeFor,
   isConfirmable,
   isPayable,
   isPayableAmount,
@@ -67,18 +66,6 @@ describe('settlesSynchronously', () => {
     'never settles %s inline: only a verified webhook may complete it (ADR-006)',
     (method) => {
       expect(settlesSynchronously(method)).toBe(false);
-    },
-  );
-});
-
-describe('feeFor', () => {
-  // Pinned deliberately. When the banded model in platform-fee-model.md is
-  // decided this test must be rewritten - it exists so that happens knowingly
-  // rather than by a silent behaviour change.
-  it.each([1n, 10_00n, 10_000_00n, 500_000_00n])(
-    'charges no fee on %s minor units while the band model is undecided',
-    (amount) => {
-      expect(feeFor(amount)).toBe(0n);
     },
   );
 });

@@ -45,32 +45,22 @@ export function settlesSynchronously(method: PaymentMethod): boolean {
 /**
  * The total charged for a payment.
  *
- * Kept as a named function even though the fee is currently always zero, so the
- * call site reads as a deliberate total rather than an amount that happens to be
- * used twice, and so the banded model lands in exactly one place.
+ * Kept as a named function so the call site reads as a deliberate total rather
+ * than an amount that happens to be used twice. The fee itself is resolved by
+ * `FeesService` from versioned definitions (ADR-009), not computed here.
  */
 export function totalFor(amountMinor: bigint, feeMinor: bigint): bigint {
   return amountMinor + feeMinor;
 }
 
 /**
- * The platform fee for a payment.
+ * The smallest deposit the platform accepts.
  *
- * Deliberately zero: the banded fee model in
- * `docs/open-questions/platform-fee-model.md` is not decided. Its boundaries are
- * ambiguous at every threshold ("up to ₦10,000" then "from ₦10,000" overlap at
- * exactly ₦10,000), and guessing one would be a money bug that only surfaces in
- * reconciliation.
- *
- * Returning an explicit zero, rather than omitting the concept, keeps the fee
- * visible in the API and the ledger so it cannot be silently forgotten.
+ * Cost-plus pricing is regressive at very small amounts — a ₦100 deposit would
+ * be charged over half of itself — so a floor is a product requirement rather
+ * than a fee rule, and ADR-009 records it as one.
  */
-export function feeFor(amountMinor: bigint): bigint {
-  // Referenced so the parameter documents the signature the banded model needs,
-  // without the linter treating it as dead.
-  void amountMinor;
-  return 0n;
-}
+export const MINIMUM_DEPOSIT_MINOR = 50_000n;
 
 /** A payment must move a positive amount. */
 export function isPayableAmount(amountMinor: bigint): boolean {

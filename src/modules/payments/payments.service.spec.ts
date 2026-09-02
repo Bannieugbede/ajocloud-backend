@@ -98,6 +98,7 @@ function build(seed: Seed = {}) {
     ),
     verifyPin: jest.fn().mockResolvedValue(undefined),
     audit: jest.fn().mockResolvedValue(undefined),
+    assessFee: jest.fn().mockResolvedValue({ amountMinor: 0n, definitionId: null, snapshot: {} }),
   };
   if (seed.pinThrows) calls.verifyPin.mockRejectedValue(seed.pinThrows);
 
@@ -142,6 +143,9 @@ function build(seed: Seed = {}) {
     } as never,
     { verifyPin: calls.verifyPin } as never,
     { record: calls.audit } as never,
+    // Fees are resolved from the database; the default here charges nothing so
+    // existing expectations describe the amount alone.
+    { assess: calls.assessFee } as never,
     {
       name: 'mock',
       createTransferCharge: jest.fn().mockResolvedValue({
@@ -346,6 +350,25 @@ describe('confirm by wallet', () => {
       UnprocessableEntityException,
     );
   });
+
+  it('refuses to settle when the due changed after the intent was created', async () => {
+    // Behavioural proof that the target is resolved again inside the
+    // settlement transaction: resolving only at create time would let a due
+    // change between the two steps and still settle at the stale amount.
+    const { service, tx } = build({});
+    tx.akawoPoolDue.findUnique.mockResolvedValue({
+      id: DUE,
+      amountMinor: 9_999_00n,
+      currency: 'NGN',
+      status: 'PENDING',
+      pool: { name: 'Class of 2019', organiserUserId: 'organiser' },
+      member: { userId: USER },
+    });
+
+    await expect(service.confirm(USER, INTENT, confirmWallet, 'key-3')).rejects.toThrow(
+      /amount changed/i,
+    );
+  });
 });
 
 describe('confirm by an external rail', () => {
@@ -383,15 +406,21 @@ describe('confirm by an external rail', () => {
 describe('source guarantees', () => {
   const source = readFileSync(join(__dirname, 'payments.service.ts'), 'utf8');
 
-  it('never reads an amount from the request body', () => {
-    // The DTO has no amount field; this guards against one being added later,
-    // which a behavioural test would not catch until it was already exploitable.
-    expect(source).not.toMatch(/dto\.(amount|amountMinor|totalMinor|feeMinor)/);
+  it('never takes a fee or total from the request body', () => {
+    // A client-supplied fee or total would let a payer decide what the platform
+    // earns. Guarded in source because a behavioural test would not catch a
+    // field added later until it was already exploitable.
+    expect(source).not.toMatch(/dto\.(feeMinor|totalMinor)/);
   });
 
-  it('resolves the target again inside the settlement transaction', () => {
-    // Resolving only at create time would let a due change between the two
-    // steps and still be settled at the old amount.
-    expect(source).toMatch(/settleFromWallet[\s\S]*?resolveTarget\(tx,/);
+  it('accepts a client amount only for a wallet top-up', () => {
+    // A top-up is the sole target with no row to read an amount from. Every
+    // other target must read its own, so a payer cannot settle a large due for
+    // one naira.
+    // One line, so there is a single controlled entry point for a client
+    // amount rather than several places to keep in step.
+    const amountLines = source.split('\n').filter((line) => line.includes('dto.amountMinor'));
+    expect(amountLines).toHaveLength(1);
+    expect(source).toMatch(/WALLET_TOPUP[\s\S]*?requestedAmountMinor/);
   });
 });

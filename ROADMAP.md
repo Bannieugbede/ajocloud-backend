@@ -6,7 +6,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | ------------------------------ | ------: | -------: | ----------: | ------: | ---------: |
 | 0 Foundation                   |      14 |       14 |           0 |       0 |       100% |
 | 1 Identity/security foundation |       8 |        7 |           0 |       0 |      87.5% |
-| 2 Financial core               |      11 |        5 |           0 |       0 |      45.5% |
+| 2 Financial core               |      11 |        7 |           0 |       0 |      63.6% |
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
 | 5 Food Ajo                     |      13 |        8 |           2 |       0 |      61.5% |
@@ -16,7 +16,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **123** |   **64** |       **2** |   **4** |    **52%** |
+| **Total**                      | **123** |   **66** |       **2** |   **3** |    **54%** |
 
 ## Phase 0 — Foundation
 
@@ -55,10 +55,12 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 - [x] **COMPLETE** Available/reserved wallet account semantics used by Bill Payment
   - Extended with owner-scoped derived wallet summary and activity APIs for the mobile wallet phase.
 - [ ] **NOT STARTED** General payment-provider implementation (schema only)
-- [ ] **NOT STARTED** Verified webhook intake framework
+- [x] **COMPLETE** Verified webhook intake framework — events are recorded before processing, and a
+      successful transaction now posts to the ledger (ADR-010). Money can enter the platform.
 - [ ] **NOT STARTED** General reconciliation service
 - [ ] **NOT STARTED** Withdrawal workflow
-- [ ] **NOT STARTED** General fee application service
+- [x] **COMPLETE** General fee application service — cost-plus tiered pricing (ADR-009) resolved
+      from versioned definitions, applied to deposits and netted from the credit.
 - [ ] **NOT STARTED** Settlement processing
 
 ## Phase 3 — Traditional Ajo
@@ -178,7 +180,9 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [ ] **NOT STARTED** NIN/vNIN workflow
 - [ ] **NOT STARTED** Biometric/address workflow and retention jobs
 - [ ] **RELEASE BLOCKER** Re-verify or demote every KYC check flagged `SANDBOX_FALLBACK` before the first production release; those identities passed against the mock provider, not Monnify (ADR-006).
-- [ ] **BLOCKED** Ledger posting for settlement, refund, and disbursement webhook events — account mapping and fee treatment need an ADR.
+- [x] **COMPLETE (settlement)** Ledger posting for successful transactions — ADR-010 sets the
+      account mapping and nets the fee from the credit. Refund and disbursement posting stay open:
+      reversal handling waits on fee refundability, and payouts are a separate workflow.
 - [ ] **BLOCKED** Real Monnify payment/bill-payment/payout adapters and higher-tier limits — provider/compliance rules unverified. Monnify identity verification is implemented (ADR-005) but its endpoint paths are unconfirmed.
 
 ## Phase 9 — Referrals and rewards

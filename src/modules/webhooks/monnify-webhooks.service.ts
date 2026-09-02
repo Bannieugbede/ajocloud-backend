@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto';
 import { EventProcessingStatus } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { PaymentSettlementService } from '../payments/payment-settlement.service.js';
 import {
   extractMonnifyEvent,
+  type ExtractedMonnifyEvent,
   type MonnifyEventEnvelope,
   type MonnifyEventKind,
 } from './domain/monnify-events.js';
@@ -43,6 +45,7 @@ export class MonnifyWebhooksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly settlement: PaymentSettlementService,
   ) {}
 
   async record(
@@ -122,9 +125,59 @@ export class MonnifyWebhooksService {
 
     if (stale) {
       this.logger.warn(`Monnify ${kind} event rejected as stale`);
+      return { received: true, firstDelivery: true };
     }
 
+    // Posted only after the event row is durable, so a posting failure leaves
+    // the event PENDING for retry rather than costing us the acknowledgement.
+    await this.applyToLedger(kind, event);
+
     return { received: true, firstDelivery: true };
+  }
+
+  /**
+   * Moves money for the event kinds that represent a completed payment.
+   *
+   * Deliberately narrow: only a transaction completion credits a wallet, and
+   * only against an intent that already exists. Every other kind is recorded
+   * and left alone — a settlement or wallet-activity event describes the
+   * provider's own books, not ours, and reversals are left to reconciliation
+   * while fee refundability is undecided (ADR-010).
+   */
+  private async applyToLedger(kind: MonnifyEventKind, event: ExtractedMonnifyEvent): Promise<void> {
+    if (kind !== 'TRANSACTION_COMPLETION' || !event.providerReference) return;
+
+    const failed = event.declaredType === 'FAILED_TRANSACTION';
+    try {
+      const outcome = failed
+        ? await this.settlement.settleFailed(event.providerReference, 'Provider reported a failure')
+        : await this.settlement.settleSuccessful(event.providerReference);
+
+      if (outcome.status === 'UNMATCHED') {
+        // Not an error: a payment made outside an intent, or one whose intent
+        // was never created. Reconciliation owns these, not this handler.
+        this.logger.warn('Monnify transaction matched no payment intent');
+        return;
+      }
+      await this.prisma.paymentWebhookEvent.update({
+        where: {
+          provider_providerEventId: { provider: PROVIDER, providerEventId: event.eventId },
+        },
+        data: { status: EventProcessingStatus.PROCESSED, processedAt: new Date() },
+      });
+    } catch (error) {
+      // The event row stays PENDING so it can be retried; the acknowledgement
+      // has already been earned by recording it.
+      this.logger.error(
+        `Monnify ${kind} settlement failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      );
+      await this.prisma.paymentWebhookEvent.update({
+        where: {
+          provider_providerEventId: { provider: PROVIDER, providerEventId: event.eventId },
+        },
+        data: { failureReason: 'Ledger posting failed; awaiting retry' },
+      });
+    }
   }
 }
 

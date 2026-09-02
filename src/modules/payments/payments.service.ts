@@ -22,12 +22,13 @@ import {
   type TransactionClient,
 } from '../../infrastructure/database/transaction.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { FeesService } from '../fees/fees.service.js';
 import { TransactionPinService } from '../auth/transaction-pin.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import {
+  MINIMUM_DEPOSIT_MINOR,
   INTENT_TTL_MS,
   canPayFromWallet,
-  feeFor,
   isPayable,
   isPayableAmount,
   settlesSynchronously,
@@ -70,14 +71,17 @@ export class PaymentsService {
     private readonly ledger: LedgerService,
     private readonly pins: TransactionPinService,
     private readonly audit: AuditService,
+    private readonly fees: FeesService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
   /**
    * Creates an intent for a target.
    *
-   * The amount comes from `resolveTarget`, never from the request: the DTO has
-   * no amount field at all, so there is nothing a caller could tamper with.
+   * The amount comes from `resolveTarget`, which reads it from the target row —
+   * never from the request — so a caller cannot settle a large due for one
+   * naira. A wallet top-up is the one exception, because it has no row to read:
+   * there the user is choosing how much of their own money to bring in.
    */
   async create(
     userId: string,
@@ -96,12 +100,19 @@ export class PaymentsService {
       userId,
       dto.targetType,
       dto.targetId ?? null,
+      dto.amountMinor === undefined ? null : BigInt(dto.amountMinor),
     );
     if (!isPayableAmount(target.amountMinor)) {
       throw new UnprocessableEntityException('This item has nothing to pay');
     }
 
-    const feeMinor = feeFor(target.amountMinor);
+    // Deposits are the only target that funds the wallet from outside, so they
+    // carry the deposit fee; everything else moves money already inside the
+    // ledger and is not charged again. See ADR-009.
+    const feeMinor =
+      dto.targetType === PaymentTargetType.WALLET_TOPUP
+        ? (await this.fees.assess('DEPOSIT', target.amountMinor)).amountMinor
+        : 0n;
     const wallet = await this.prisma.wallet.findFirst({
       where: { userId, currency: target.currency },
       select: { id: true },
@@ -190,7 +201,13 @@ export class PaymentsService {
 
       // Re-resolved inside the transaction: the amount is only trustworthy if
       // the target still says so at the moment money moves.
-      const target = await this.resolveTarget(tx, userId, intent.targetType, intent.targetId);
+      const target = await this.resolveTarget(
+        tx,
+        userId,
+        intent.targetType,
+        intent.targetId,
+        intent.amountMinor,
+      );
       if (target.amountMinor !== intent.amountMinor) {
         throw new ConflictException('The amount changed. Start this payment again.');
       }
@@ -219,8 +236,8 @@ export class PaymentsService {
             direction: 'CREDIT',
             amountMinor: intent.amountMinor,
           },
-          // Only present when a fee is actually charged, so the posting stays
-          // balanced while feeFor returns zero.
+          // Only present when a fee is actually charged, so a zero-fee target
+          // does not put an empty row in the ledger.
           ...(intent.feeMinor > 0n
             ? [
                 {
@@ -288,6 +305,7 @@ export class PaymentsService {
       userId,
       intent.targetType,
       intent.targetId,
+      intent.amountMinor,
     );
 
     const input = {
@@ -377,6 +395,13 @@ export class PaymentsService {
     userId: string,
     targetType: PaymentTargetType,
     targetId: string | null,
+    /**
+     * Only consulted for a wallet top-up, which has no row to read an amount
+     * from. On settlement this is the amount already stored on the intent, so
+     * the re-resolution still compares against what the user was quoted rather
+     * than against a fresh client value.
+     */
+    requestedAmountMinor: bigint | null = null,
   ): Promise<ResolvedTarget> {
     switch (targetType) {
       case PaymentTargetType.AKAWO_POOL_DUE: {
@@ -400,11 +425,28 @@ export class PaymentsService {
           description: `Akawo pool: ${due.pool.name}`,
         };
       }
-      case PaymentTargetType.WALLET_TOPUP:
-        // A top-up has no target row to read an amount from, so it cannot be
-        // created until the funding contract defines where the amount comes
-        // from. Refused explicitly rather than defaulting to zero.
-        throw new UnprocessableEntityException('Wallet top-up is not available yet');
+      case PaymentTargetType.WALLET_TOPUP: {
+        // The one target with no row to read an amount from: the user chooses
+        // how much of their own money to bring in. Accepted here and nowhere
+        // else, so it cannot be used to underpay a due that has its own amount.
+        if (requestedAmountMinor === null) {
+          throw new UnprocessableEntityException('Choose how much you want to add');
+        }
+        if (requestedAmountMinor < MINIMUM_DEPOSIT_MINOR) {
+          throw new UnprocessableEntityException(
+            `The smallest amount you can add is ${(MINIMUM_DEPOSIT_MINOR / 100n).toString()} naira`,
+          );
+        }
+        const wallet = await client.wallet.findFirst({
+          where: { userId },
+          select: { currency: true },
+        });
+        return {
+          amountMinor: requestedAmountMinor,
+          currency: wallet?.currency ?? 'NGN',
+          description: 'Wallet top-up',
+        };
+      }
       case PaymentTargetType.AJO_CONTRIBUTION:
       case PaymentTargetType.FOOD_SUBSCRIPTION:
         throw new UnprocessableEntityException('This payment type is not available yet');

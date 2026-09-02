@@ -13,8 +13,13 @@ function build(options: { existing?: boolean; createFails?: unknown } = {}) {
       create,
     },
   };
+  // Nothing here exercises settlement; the ledger path has its own spec.
+  const settlement = {
+    settleSuccessful: jest.fn().mockResolvedValue({ status: 'UNMATCHED' }),
+    settleFailed: jest.fn().mockResolvedValue({ status: 'UNMATCHED' }),
+  };
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
-  const service = new MonnifyWebhooksService(prisma as never, audit as never);
+  const service = new MonnifyWebhooksService(prisma as never, audit as never, settlement as never);
   return { service, prisma, audit };
 }
 

@@ -161,6 +161,9 @@ enum IdempotencyStatus {
 enum FeeCalculationType {
   FIXED
   PERCENTAGE
+  /// Cost-plus: the provider's own charge plus a markup read from the
+  /// definition's tiers, floored at `basisPoints` of the amount. See ADR-009.
+  TIERED
 }
 
 enum FeeAssessmentStatus {

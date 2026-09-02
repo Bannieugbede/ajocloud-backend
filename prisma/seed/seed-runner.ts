@@ -25,6 +25,7 @@ import { seedAjoGovernance } from './seeders/ajo-governance.js';
 import { seedDashboardActivity } from './seeders/dashboard-activity.js';
 import { seedWalletFunding } from './seeders/wallet-funding.js';
 import { seedIdentityAndCompliance } from './seeders/identity-compliance.js';
+import { seedFees } from './seeders/fees.js';
 import { seedNotifications } from './seeders/notifications.js';
 import { seedReferrals } from './seeders/referrals.js';
 
@@ -460,6 +461,7 @@ export async function runSeed(): Promise<void> {
     // above create, and returns early rather than inventing them.
     await seedAjoGovernance(prisma);
     await seedIdentityAndCompliance(prisma);
+    await seedFees(prisma);
     await seedNotifications(prisma);
     await seedReferrals(prisma);
   } finally {

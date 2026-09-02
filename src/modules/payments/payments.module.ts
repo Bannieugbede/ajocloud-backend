@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { FeesModule } from '../fees/fees.module.js';
+import { PaymentSettlementService } from './payment-settlement.service.js';
 import { ConfigService } from '@nestjs/config';
 import type { Environment } from '../../config/env.schema.js';
 import { AuditModule } from '../audit/audit.module.js';
@@ -10,10 +12,11 @@ import { MockPaymentProvider } from './providers/mock-payment.provider.js';
 import { PAYMENT_PROVIDER } from './providers/payment-provider.js';
 
 @Module({
-  imports: [AuthModule, LedgerModule, AuditModule],
+  imports: [AuthModule, LedgerModule, AuditModule, FeesModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
+    PaymentSettlementService,
     MockPaymentProvider,
     {
       provide: PAYMENT_PROVIDER,
@@ -28,6 +31,6 @@ import { PAYMENT_PROVIDER } from './providers/payment-provider.js';
       },
     },
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, PaymentSettlementService],
 })
 export class PaymentsModule {}
