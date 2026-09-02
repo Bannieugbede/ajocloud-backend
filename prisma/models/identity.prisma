@@ -28,6 +28,8 @@ model User {
   staffInviteAccepted    StaffInvite[]                  @relation("StaffInviteAccepted")
   adminNotifications     AdminNotification[]            @relation("AdminNotificationTarget")
   adminNotificationReads AdminNotificationRead[]
+  akawoPoolsOrganised    AkawoPool[]
+  akawoPoolMemberships   AkawoPoolMember[]
 
   @@index([status, createdAt])
   @@map("users")

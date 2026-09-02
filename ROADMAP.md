@@ -10,13 +10,13 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
 | 5 Food Ajo                     |      13 |        4 |           0 |       0 |      30.8% |
-| 6 Akawo                        |       7 |        3 |           1 |       0 |      42.9% |
+| 6 Akawo                        |       8 |        4 |           1 |       0 |        50% |
 | 7 Bill Payment                 |      11 |        6 |           0 |       2 |      54.5% |
 | 8 Progressive KYC              |       8 |        2 |           0 |       1 |        25% |
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **122** |   **63** |       **2** |   **4** |  **51.6%** |
+| **Total**                      | **123** |   **64** |       **2** |   **4** |    **52%** |
 
 ## Phase 0 — Foundation
 
@@ -123,6 +123,10 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [ ] **IN PROGRESS** Auto-save schedules and manual deposits — schedule creation implemented;
       execution and ledger-backed manual deposits require Akawo financial-account ownership support
 - [ ] **NOT STARTED** Ledger-backed withdrawal workflow
+- [x] **COMPLETE** Akawo group pools — organiser-created collection pools with digest-stored join
+      codes, member self-identification, per-member dues, lifecycle, waivers, and an organiser
+      record view. Collection is blocked on the payment workflow: `PAID` is reachable only by a
+      settled ledger posting, and no route writes it. ADR-007. 23 tests.
 - [ ] **DEFERRED / POST-MVP** Institutional products, enrolment, yield, settlement, tax, and reconciliation per ADR-003
 
 ## Phase 7 — Bill Payment

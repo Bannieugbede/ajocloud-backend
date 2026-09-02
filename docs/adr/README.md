@@ -6,5 +6,6 @@
 - [ADR-004: Identity verification provider and identity-data policy](ADR-004-identity-verification-provider-and-data-policy.md) — raw identifiers are never persisted; provider choice superseded by ADR-005.
 - [ADR-005: Monnify as the single payments, verification, and payout provider](ADR-005-monnify-as-single-financial-and-identity-provider.md) — one vendor for money and identity; Dojah removed.
 - [ADR-006: Monnify webhook ingestion and sandbox verification fallback](ADR-006-monnify-webhooks-and-sandbox-verification.md) — signed raw-body webhooks, replay-safe inbox, and a production-forbidden sandbox KYC fallback.
+- [ADR-007: Akawo group pools](ADR-007-akawo-group-pools.md) — collection pools are a separate aggregate from personal goals; paid state is derived from settled money only.
 
 Financial-rule changes require a new ADR or an explicit update to an existing one.

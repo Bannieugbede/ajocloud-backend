@@ -83,3 +83,87 @@ model SavingsWithdrawal {
   @@index([goalId, status, requestedAt])
   @@map("savings_withdrawals")
 }
+
+/// A collection pool: an organiser gathers a fixed amount from named members
+/// towards a stated purpose. Distinct from SavingsGoal, which has one owner and
+/// no members. See ADR-007.
+model AkawoPool {
+  id             String          @id @default(uuid()) @db.Uuid
+  organiserUserId String         @db.Uuid
+  name           String          @db.VarChar(160)
+  purpose        String?         @db.VarChar(500)
+  /// What each member owes. Every member of a pool owes the same amount; a pool
+  /// with per-member amounts would be a different product.
+  amountMinor    BigInt
+  currency       String          @default("NGN") @db.Char(3)
+  status         AkawoPoolStatus @default(DRAFT)
+  /// SHA-256 of the join code. The plaintext is shown to the organiser once and
+  /// never stored, so an outstanding code cannot be read from a database dump.
+  joinCodeDigest String          @unique @db.VarChar(128)
+  /// Label for the reference members supply when joining, e.g. "Matric number".
+  referenceLabel String          @default("Reference") @db.VarChar(80)
+  dueAt          DateTime?       @db.Timestamptz(6)
+  closedAt       DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+
+  organiser User               @relation(fields: [organiserUserId], references: [id], onDelete: Restrict)
+  members   AkawoPoolMember[]
+  dues      AkawoPoolDue[]
+
+  @@index([organiserUserId, status])
+  @@index([status, createdAt])
+  @@map("akawo_pools")
+}
+
+/// Membership of a pool. The name and reference are what the member supplies on
+/// joining, not their platform profile: an organiser collecting from a class
+/// needs the matric number they can reconcile against, and the joiner may have
+/// no profile at all.
+model AkawoPoolMember {
+  id           String                @id @default(uuid()) @db.Uuid
+  poolId       String                @db.Uuid
+  userId       String                @db.Uuid
+  fullName     String                @db.VarChar(160)
+  reference    String                @db.VarChar(80)
+  status       AkawoPoolMemberStatus @default(ACTIVE)
+  joinedAt     DateTime              @default(now()) @db.Timestamptz(6)
+  removedAt    DateTime?             @db.Timestamptz(6)
+
+  pool AkawoPool     @relation(fields: [poolId], references: [id], onDelete: Restrict)
+  user User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  dues AkawoPoolDue[]
+
+  /// One membership per person per pool.
+  @@unique([poolId, userId])
+  /// The reference is how the organiser identifies a member, so it must not
+  /// repeat within a pool.
+  @@unique([poolId, reference])
+  @@index([poolId, status])
+  @@map("akawo_pool_members")
+}
+
+/// What one member owes in one pool. `PAID` is only ever reached by settled
+/// ledger movement; nothing may set it directly. See ADR-007.
+model AkawoPoolDue {
+  id                  String         @id @default(uuid()) @db.Uuid
+  poolId              String         @db.Uuid
+  memberId            String         @db.Uuid
+  amountMinor         BigInt
+  currency            String         @default("NGN") @db.Char(3)
+  status              AkawoDueStatus @default(PENDING)
+  /// Set when the paying ledger transaction posts. Null while unpaid.
+  ledgerTransactionId String?        @unique @db.Uuid
+  paidAt              DateTime?      @db.Timestamptz(6)
+  waivedReason        String?        @db.VarChar(500)
+  createdAt           DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @db.Timestamptz(6)
+
+  pool   AkawoPool       @relation(fields: [poolId], references: [id], onDelete: Restrict)
+  member AkawoPoolMember @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  /// One outstanding due per member per pool.
+  @@unique([poolId, memberId])
+  @@index([poolId, status])
+  @@map("akawo_pool_dues")
+}

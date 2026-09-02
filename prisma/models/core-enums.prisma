@@ -361,3 +361,22 @@ enum Gender {
   OTHER
   PREFER_NOT_TO_SAY
 }
+
+enum AkawoPoolStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum AkawoPoolMemberStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum AkawoDueStatus {
+  PENDING
+  PROCESSING
+  PAID
+  WAIVED
+}
