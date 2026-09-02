@@ -1,6 +1,6 @@
 # Current status
 
-- Last updated: 2026-09-01
+- Last updated: 2026-09-02
 - Current phase: Financial-core hardening plus staged Traditional Ajo, Food Coordinator, and Bill Payment delivery, with an admin read API layer serving the web admin dashboard
 
 ## Complete
@@ -14,7 +14,10 @@ reservation/payment/manual reconciliation/provider reversal/receipt; KYC tier/pr
 configurable referral and notification policies; Brevo transactional email/SMS adapters; versioned
 welcome, authentication, security, and product notification templates; Akawo schema expansion; and
 public brand configuration.
-Approved-coordinator Food Ajo programme creation/reads; Akawo flexible/target goal creation,
+Approved-coordinator Food Ajo programme creation/reads plus the full coordinator operating surface —
+lifecycle transitions with price locking at open, an enrolment-sized procurement plan, verified-vendor
+purchase orders with receipt-gated fulfilment, server-built distribution lists, and member-issued
+one-time collection codes; Akawo flexible/target goal creation,
 owner-scoped progress, and paginated contribution statements. Owner-scoped wallet balance/activity
 reads and Akawo future schedule creation are also implemented.
 
@@ -30,6 +33,12 @@ support inquiries. Admins review both through dedicated read endpoints and the w
 
 ## In progress
 
+Food Ajo contributions are **IN PROGRESS**: members can enrol and withdraw, and capacity is counted
+in portions, but no route collects money against a subscription — the `FOOD_SUBSCRIPTION` payment
+target exists unused, so a programme's expected amount is what members owe rather than what has been
+received. Food Ajo vendor approval is **IN PROGRESS**: coordinators propose vendors and orders are
+refused for unverified ones, but the admin approval route is not built, so verified vendors arrive
+only through the seed or direct SQL.
 Akawo auto-save is **IN PROGRESS**: authenticated users can create future schedules for their own
 active goals. Notification event coverage is **IN PROGRESS**: verification and welcome are wired;
 other template families await their domain events. Durable Akawo execution and ledger-backed

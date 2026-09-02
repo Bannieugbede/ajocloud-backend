@@ -74,6 +74,15 @@ bun run build
 bun run check
 ```
 
+Integration specs are skipped unless a database is pointed at explicitly, so the unit suite stays
+runnable without one:
+
+```bash
+RUN_DATABASE_INTEGRATION=true DATABASE_URL=<scratch database> bun run test:integration
+```
+
+Use a scratch database, never a shared one: these specs write real rows.
+
 ## Deployment
 
 `Dockerfile` is a multi-stage non-root production image. Deploy migrations separately with `bun run prisma:migrate:deploy`; application startup never runs migrations or seeds. Terminate traffic before stopping workers and infrastructure connections. See [deployment](docs/deployment.md).

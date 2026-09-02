@@ -9,7 +9,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 2 Financial core               |      11 |        5 |           0 |       0 |      45.5% |
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
-| 5 Food Ajo                     |      13 |        4 |           0 |       0 |      30.8% |
+| 5 Food Ajo                     |      13 |        8 |           2 |       0 |      61.5% |
 | 6 Akawo                        |       8 |        4 |           1 |       0 |        50% |
 | 7 Bill Payment                 |      11 |        6 |           0 |       2 |      54.5% |
 | 8 Progressive KYC              |       8 |        2 |           0 |       1 |        25% |
@@ -106,12 +106,25 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Tier-3-gated coordinator approval with verification references
 - [ ] **NOT STARTED** Coordinator suspension/revocation API
 - [x] **COMPLETE** Approved-coordinator programme creation and authenticated programme reads
-- [ ] **NOT STARTED** Package activation/price locking/capacity service
-- [ ] **NOT STARTED** Subscriptions and contributions
-- [ ] **NOT STARTED** Vendor approval and tracking
-- [ ] **NOT STARTED** Purchase-order, invoice, and receipt workflow
-- [ ] **NOT STARTED** Distribution and evidence workflow
-- [ ] **NOT STARTED** OTP/QR confirmation service
+- [x] **COMPLETE** Package activation/price locking/capacity service — opening a programme stamps
+      `priceLockedAt` on every package, and a locked package is refused for edit, so the price a
+      member enrolled against cannot be changed underneath them.
+- [ ] **IN PROGRESS** Subscriptions and contributions — enrolment, withdrawal, and portion-based
+      capacity are implemented. Contributions are not collected: the `FOOD_SUBSCRIPTION` payment
+      target exists but no route settles one, so a programme's expected amount is what members owe
+      rather than what has been received.
+- [ ] **IN PROGRESS** Vendor approval and tracking — coordinators can propose and list vendors, and
+      orders are refused for an unverified one. The approval route itself is admin work and is not
+      built.
+- [x] **COMPLETE** Purchase-order, invoice, and receipt workflow — orders are sized from enrolled
+      portions rather than capacity, totalled server-side through integer arithmetic, restricted to
+      verified vendors, and cannot be marked fulfilled until a receipt is recorded by storage key
+      and content hash.
+- [x] **COMPLETE** Distribution and evidence workflow — items are built server-side from live
+      subscriptions, and neither the distribution nor the programme can be completed while a member
+      is still owed food.
+- [x] **COMPLETE** OTP/QR confirmation service — one-time 30-minute collection codes issued to the
+      member (never the coordinator), stored only as a digest and burnt on use.
 - [ ] **NOT STARTED** Missing-item/non-delivery disputes
 
 ## Phase 6 — Akawo

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Added
+
+- Food Ajo coordinators can now run a programme end to end. New routes under
+  `/api/v1/food-ajo` cover lifecycle transitions, package edits, a procurement
+  plan, purchase orders, delivery receipts, distributions, and collection
+  confirmation, plus vendor listing and proposal. Every route is scoped to the
+  coordinator of that specific programme rather than to a role, so coordinating
+  one programme grants no control over another.
+- Opening a programme now locks its package prices. `priceLockedAt` is stamped
+  on every unlocked package at that moment and a locked package is refused for
+  edit, so the price a member enrolled against cannot be changed afterwards.
+- Members issue their own one-time collection code
+  (`POST /api/v1/food-ajo/distributions/:distributionId/collection-code`),
+  returned once and stored only as a digest. It expires after 30 minutes and is
+  burnt on use. The code is deliberately not issued by the coordinator: someone
+  able to both mint and redeem it could record food as collected that nobody
+  received.
+- Purchase orders are sized from enrolled portions rather than programme
+  capacity, totalled server-side, restricted to verified vendors, and cannot be
+  marked fulfilled until a delivery receipt has been recorded.
+
 ### Changed
 
 - Joining the waitlist is now reported as a success when the address is already
