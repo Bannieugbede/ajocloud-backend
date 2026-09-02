@@ -179,6 +179,15 @@ const programmeSeed = [
 export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
   const passwordHash = await hash('Development-Only-Password-123!', { type: argon2id });
 
+  // Registration grants MEMBER, so a seeded account without it cannot do what
+  // an ordinary user can - creating a group, locking one, or asking for a slot
+  // swap all return 403. Seeded users are meant to demonstrate those flows.
+  const memberRole = await prisma.role.upsert({
+    where: { name: 'MEMBER' },
+    update: {},
+    create: { name: 'MEMBER', isSystem: true },
+  });
+
   // --- Users, profiles, credentials, KYC, wallets ---
   const userIds: string[] = [];
   for (const seed of userSeed) {
@@ -196,6 +205,16 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
       },
     });
     userIds.push(user.id);
+    // Not an upsert: the unique key includes nullable organisationId/groupId,
+    // and Postgres treats NULLs as distinct, so upserting on it would insert a
+    // duplicate on every re-run instead of matching the existing row.
+    const existingRole = await prisma.userRole.findFirst({
+      where: { userId: user.id, roleId: memberRole.id, organisationId: null, groupId: null },
+      select: { id: true },
+    });
+    if (!existingRole) {
+      await prisma.userRole.create({ data: { userId: user.id, roleId: memberRole.id } });
+    }
     await prisma.userProfile.upsert({
       where: { userId: user.id },
       update: {},
