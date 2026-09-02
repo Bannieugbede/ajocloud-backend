@@ -18,7 +18,10 @@ import { accountNumberDigest } from '../../../src/modules/kyc/domain/identity-ve
  */
 
 /** The PIN and account number are development-only and deliberately obvious. */
-const SEED_PIN = '135790';
+// Must be TRANSACTION_PIN_LENGTH digits: the PIN DTOs reject anything else
+// before it is ever hashed, so a longer seed PIN can never be verified through
+// the API and makes every seeded payment flow untestable.
+const SEED_PIN = '1357';
 const SEED_ACCOUNT_NUMBER = '0000000001';
 
 export async function seedIdentityAndCompliance(prisma: PrismaClient): Promise<void> {

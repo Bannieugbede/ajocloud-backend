@@ -380,3 +380,27 @@ enum AkawoDueStatus {
   PAID
   WAIVED
 }
+
+enum PaymentIntentStatus {
+  REQUIRES_CONFIRMATION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+/// What a payment intent is settling. Paired with `targetId` rather than a
+/// foreign key per product, so a new payable product adds one value here and one
+/// branch in `resolveTarget`, not a column and a constraint.
+enum PaymentTargetType {
+  AKAWO_POOL_DUE
+  AJO_CONTRIBUTION
+  FOOD_SUBSCRIPTION
+  WALLET_TOPUP
+}
+
+enum PaymentMethod {
+  WALLET
+  TRANSFER
+  CARD
+}

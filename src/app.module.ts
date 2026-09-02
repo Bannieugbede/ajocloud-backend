@@ -22,6 +22,7 @@ import { WalletsModule } from './modules/wallets/wallets.module.js';
 import { PublicConfigurationModule } from './modules/configuration/public-configuration.module.js';
 import { FoodCoordinatorApplicationsModule } from './modules/food-coordinator-applications/food-coordinator-applications.module.js';
 import { BillPaymentsModule } from './modules/bill-payments/bill-payments.module.js';
+import { PaymentsModule } from './modules/payments/payments.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
 import { AkawoModule } from './modules/akawo/akawo.module.js';
@@ -52,6 +53,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     HealthModule,
     AjoGroupsModule,
     LedgerModule,
+    PaymentsModule,
     WalletsModule,
     PublicConfigurationModule,
     FoodCoordinatorApplicationsModule,

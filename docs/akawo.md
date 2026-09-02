@@ -70,3 +70,11 @@ API — all routes require authentication:
 No route in this module writes that status, and a test asserts the service source
 contains no such write. Collection is therefore blocked until the payment
 workflow exists; the schema needs no further change to support it.
+
+## Paying a due
+
+A due reaches `PAID` only through the shared payment contract in
+[payments.md](payments.md) — this module contains no path that writes it, which
+is what ADR-007 requires. Create an intent with `targetType: AKAWO_POOL_DUE` and
+the due's id, then confirm it; settlement posts the ledger and transitions the
+due in one transaction.

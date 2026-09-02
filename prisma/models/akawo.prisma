@@ -88,26 +88,26 @@ model SavingsWithdrawal {
 /// towards a stated purpose. Distinct from SavingsGoal, which has one owner and
 /// no members. See ADR-007.
 model AkawoPool {
-  id             String          @id @default(uuid()) @db.Uuid
-  organiserUserId String         @db.Uuid
-  name           String          @db.VarChar(160)
-  purpose        String?         @db.VarChar(500)
+  id              String          @id @default(uuid()) @db.Uuid
+  organiserUserId String          @db.Uuid
+  name            String          @db.VarChar(160)
+  purpose         String?         @db.VarChar(500)
   /// What each member owes. Every member of a pool owes the same amount; a pool
   /// with per-member amounts would be a different product.
-  amountMinor    BigInt
-  currency       String          @default("NGN") @db.Char(3)
-  status         AkawoPoolStatus @default(DRAFT)
+  amountMinor     BigInt
+  currency        String          @default("NGN") @db.Char(3)
+  status          AkawoPoolStatus @default(DRAFT)
   /// SHA-256 of the join code. The plaintext is shown to the organiser once and
   /// never stored, so an outstanding code cannot be read from a database dump.
-  joinCodeDigest String          @unique @db.VarChar(128)
+  joinCodeDigest  String          @unique @db.VarChar(128)
   /// Label for the reference members supply when joining, e.g. "Matric number".
-  referenceLabel String          @default("Reference") @db.VarChar(80)
-  dueAt          DateTime?       @db.Timestamptz(6)
-  closedAt       DateTime?       @db.Timestamptz(6)
-  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  referenceLabel  String          @default("Reference") @db.VarChar(80)
+  dueAt           DateTime?       @db.Timestamptz(6)
+  closedAt        DateTime?       @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
 
-  organiser User               @relation(fields: [organiserUserId], references: [id], onDelete: Restrict)
+  organiser User              @relation(fields: [organiserUserId], references: [id], onDelete: Restrict)
   members   AkawoPoolMember[]
   dues      AkawoPoolDue[]
 
@@ -121,17 +121,17 @@ model AkawoPool {
 /// needs the matric number they can reconcile against, and the joiner may have
 /// no profile at all.
 model AkawoPoolMember {
-  id           String                @id @default(uuid()) @db.Uuid
-  poolId       String                @db.Uuid
-  userId       String                @db.Uuid
-  fullName     String                @db.VarChar(160)
-  reference    String                @db.VarChar(80)
-  status       AkawoPoolMemberStatus @default(ACTIVE)
-  joinedAt     DateTime              @default(now()) @db.Timestamptz(6)
-  removedAt    DateTime?             @db.Timestamptz(6)
+  id        String                @id @default(uuid()) @db.Uuid
+  poolId    String                @db.Uuid
+  userId    String                @db.Uuid
+  fullName  String                @db.VarChar(160)
+  reference String                @db.VarChar(80)
+  status    AkawoPoolMemberStatus @default(ACTIVE)
+  joinedAt  DateTime              @default(now()) @db.Timestamptz(6)
+  removedAt DateTime?             @db.Timestamptz(6)
 
-  pool AkawoPool     @relation(fields: [poolId], references: [id], onDelete: Restrict)
-  user User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  pool AkawoPool      @relation(fields: [poolId], references: [id], onDelete: Restrict)
+  user User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   dues AkawoPoolDue[]
 
   /// One membership per person per pool.

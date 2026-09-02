@@ -8,7 +8,7 @@ const ENV: Partial<Environment> = {
   GOOGLE_CLIENT_SECRET: 'client-secret',
   GOOGLE_CALLBACK_URL: 'https://api.example.test/api/v1/auth/google/callback',
   GOOGLE_WEB_SUCCESS_URL: 'https://app.example.test/admin',
-  GOOGLE_MOBILE_SUCCESS_URL: 'ajocloud://auth/google',
+  GOOGLE_MOBILE_SUCCESS_URL: 'ajocloud:///auth/google',
   TOKEN_PEPPER: 'pepper-value-at-least-32-characters-long',
 };
 

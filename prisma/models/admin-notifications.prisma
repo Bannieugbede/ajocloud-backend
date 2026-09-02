@@ -6,17 +6,17 @@
 /// when that is null, to everyone holding `permission` — so "a KYC profile needs
 /// review" reaches whoever is on compliance rather than one named person.
 model AdminNotification {
-  id       String                @id @default(uuid()) @db.Uuid
+  id       String                    @id @default(uuid()) @db.Uuid
   type     AdminNotificationType
   severity AdminNotificationSeverity @default(INFO)
-  title    String                @db.VarChar(200)
-  body     String                @db.VarChar(1000)
+  title    String                    @db.VarChar(200)
+  body     String                    @db.VarChar(1000)
 
   /// Where the console should send someone acting on this, e.g. "/admin/kyc".
   href String? @db.VarChar(200)
 
   /// Addressed to one staff member; null means "anyone who may act on it".
-  userId String? @db.Uuid
+  userId     String? @db.Uuid
   /// Permission a reader must hold to see a broadcast. Null means any staff.
   permission String? @db.VarChar(100)
 
@@ -35,10 +35,10 @@ model AdminNotification {
   user  User?                   @relation("AdminNotificationTarget", fields: [userId], references: [id], onDelete: Cascade)
   reads AdminNotificationRead[]
 
-  /// The feed query: unresolved, newest first.
-  @@index([resolvedAt, createdAt])
   /// Dedupe lookups for a recurring condition.
   @@unique([type, subjectType, subjectId], name: "admin_notification_subject")
+  /// The feed query: unresolved, newest first.
+  @@index([resolvedAt, createdAt])
   @@index([userId, createdAt])
   @@map("admin_notifications")
 }

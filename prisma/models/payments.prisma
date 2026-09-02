@@ -134,3 +134,53 @@ model SettlementRecord {
   @@unique([provider, providerReference])
   @@map("settlement_records")
 }
+
+/// A single payment being made for one target, shared by every product.
+///
+/// `amountMinor` is always resolved server-side from the target and never
+/// accepted from the client: a client-supplied amount here would let a member
+/// settle a large due for one naira. See ADR-008.
+model PaymentIntent {
+  id       String              @id @default(uuid()) @db.Uuid
+  userId   String              @db.Uuid
+  walletId String?             @db.Uuid
+  status   PaymentIntentStatus @default(REQUIRES_CONFIRMATION)
+
+  targetType PaymentTargetType
+  /// Not a foreign key: the target lives in a different table per type. The
+  /// reference is validated inside the settlement transaction instead.
+  targetId   String?           @db.Uuid
+
+  amountMinor BigInt
+  /// Always 0 until the banded fee model is settled. Persisted rather than
+  /// derived so the audit trail records what was actually charged.
+  feeMinor    BigInt @default(0)
+  totalMinor  BigInt
+  currency    String @db.Char(3)
+
+  method            PaymentMethod?
+  /// Provider handle for a transfer or card payment; null for wallet payments,
+  /// which never leave the ledger.
+  providerReference String?        @unique @db.VarChar(191)
+
+  idempotencyKey      String  @db.VarChar(128)
+  ledgerTransactionId String? @unique @db.Uuid
+
+  failureReason String?   @db.VarChar(500)
+  confirmedAt   DateTime? @db.Timestamptz(6)
+  settledAt     DateTime? @db.Timestamptz(6)
+  /// An unconfirmed intent stops being payable after this, so a stale screen
+  /// cannot settle an amount that has since changed.
+  expiresAt     DateTime  @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  /// Scoped to the user so one member's key cannot collide with another's, and
+  /// enforced by the database so two concurrent taps cannot both create one.
+  @@unique([userId, idempotencyKey])
+  @@index([userId, status, createdAt])
+  @@index([targetType, targetId])
+  @@map("payment_intents")
+}

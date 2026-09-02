@@ -11,6 +11,30 @@ const valid = {
 };
 
 describe('environment validation', () => {
+  describe('GOOGLE_MOBILE_SUCCESS_URL', () => {
+    // A double-slashed deep link does not error at runtime: Android's auth
+    // session compares redirects with startsWith, so the browser simply never
+    // returns and sign-in hangs. It has to be caught at boot.
+    it('rejects a double-slashed deep link', () => {
+      expect(() =>
+        validateEnvironment({ ...valid, GOOGLE_MOBILE_SUCCESS_URL: 'ajocloud://auth/google' }),
+      ).toThrow(/triple-slashed/);
+    });
+
+    it('accepts the triple-slashed form the mobile app builds', () => {
+      const environment = validateEnvironment({
+        ...valid,
+        GOOGLE_MOBILE_SUCCESS_URL: 'ajocloud:///auth/google',
+      });
+      expect(environment.GOOGLE_MOBILE_SUCCESS_URL).toBe('ajocloud:///auth/google');
+    });
+
+    it('still treats a blank value as unset, which disables Google sign-in', () => {
+      const environment = validateEnvironment({ ...valid, GOOGLE_MOBILE_SUCCESS_URL: '' });
+      expect(environment.GOOGLE_MOBILE_SUCCESS_URL).toBeUndefined();
+    });
+  });
+
   it('coerces safe defaults and typed values', () => {
     const environment = validateEnvironment(valid);
     expect(environment.PORT).toBe(3000);

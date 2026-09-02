@@ -64,9 +64,25 @@ export const environmentSchema = z
     GOOGLE_CALLBACK_URL: blankAsUndefined(z.url()),
     // Where the browser lands after a successful web sign-in.
     GOOGLE_WEB_SUCCESS_URL: blankAsUndefined(z.url()),
-    // Mobile deep link, e.g. ajocloud://auth/google. Only these two targets are
+    // Mobile deep link, e.g. ajocloud:///auth/google. Only these two targets are
     // ever redirected to, so the callback cannot be pointed at an open redirect.
-    GOOGLE_MOBILE_SUCCESS_URL: blankAsUndefined(z.string().min(1)),
+    //
+    // The triple slash is required, not cosmetic. The app builds the redirect it
+    // hands the browser with Linking.createURL, whose triple-slashed form keeps
+    // the whole path in the path; the double-slashed form parses "auth" as the
+    // host instead. Android's auth session compares the two with startsWith, so
+    // a mismatch does not error - the browser simply never returns and sign-in
+    // appears to hang. Validated here because that failure is silent and only
+    // reproduces on a device.
+    GOOGLE_MOBILE_SUCCESS_URL: blankAsUndefined(
+      z
+        .string()
+        .min(1)
+        .refine((value) => !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/(?!\/)/.test(value), {
+          message:
+            'must use a triple-slashed custom scheme (ajocloud:///auth/google), so the path is not parsed as a host and matches the redirect the mobile app expects',
+        }),
+    ),
     // Origin of the web app, used to build staff invitation links. This is the
     // site root (https://example.com), NOT the console path: the invite page is
     // deliberately served outside /admin, since that layout bounces anyone

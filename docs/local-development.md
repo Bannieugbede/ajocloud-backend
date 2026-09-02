@@ -29,7 +29,7 @@ application uses, so they genuinely work rather than only looking right:
 | ------------------- | ----------------------------------------- |
 | Password (all)      | `Development-Only-Password-123!`          |
 | Email verification  | `222222` for `email.pending@example.test` |
-| Transaction PIN     | `135790` for `ada.admin@example.test`     |
+| Transaction PIN     | `1357` for `ada.admin@example.test`       |
 | Ajo invitation code | `AJOTEST-INVITE-2026`                     |
 | Ajo referral code   | `AJOTEST-REFERRAL-2026`                   |
 

@@ -46,3 +46,15 @@ bug, and it is the kind that only shows up in production reconciliation.
 Until these are settled, no `FeesModule`, controller, service, or seeded definition should be
 written. Only the domain function and its spec exist today, which is the correct state for an
 undecided rule.
+
+## What this does and does not block (2026-09-02)
+
+It no longer blocks payments. `PaymentIntent` carries `feeMinor`, the API returns it, and the
+ledger posting has a fee-revenue leg — but `feeFor` in
+`src/modules/payments/domain/payment-policy.ts` returns `0n`, and the fee leg is omitted from the
+posting while it does, so no zero-amount rows enter the ledger. A test pins the zero so the model
+landing is a deliberate change rather than a silent one.
+
+So the open question now blocks exactly one thing: what `feeFor` should return. When the boundaries
+above are stated, that function and the `FeeTier` schema are the whole change; no payment route,
+controller, or settlement path needs to move.

@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  TRANSACTION_PIN_LENGTH,
   TRANSACTION_PIN_LOCK_MS,
   TRANSACTION_PIN_MAX_ATTEMPTS,
   isPinLocked,
@@ -75,5 +78,21 @@ describe('transaction PIN policy', () => {
       const result = registerFailedAttempt(TRANSACTION_PIN_MAX_ATTEMPTS + 2, now);
       expect(result.lockedUntil).not.toBeNull();
     });
+  });
+});
+
+describe('the seeded development PIN', () => {
+  it('matches TRANSACTION_PIN_LENGTH, or no seeded account can pay', () => {
+    // The seed hashes whatever it is given, so a wrong length fails only later,
+    // at the DTO, as "That PIN is incorrect" - which reads like a bad password
+    // rather than an unusable fixture. Pinned here because the seed itself is
+    // outside Jest's roots.
+    const source = readFileSync(
+      join(__dirname, '../../../../prisma/seed/seeders/identity-compliance.ts'),
+      'utf8',
+    );
+    const seeded = /const SEED_PIN = '(\d+)'/.exec(source)?.[1];
+    expect(seeded).toBeDefined();
+    expect(seeded).toHaveLength(TRANSACTION_PIN_LENGTH);
   });
 });
