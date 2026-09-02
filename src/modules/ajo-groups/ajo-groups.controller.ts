@@ -60,6 +60,16 @@ export class AjoGroupsController {
     return this.groups.schedule(user.userId, groupId);
   }
 
+  /** Swaps on this group, including which await the caller's own decision.
+      Without this a member could only act on a swap whose id they already had. */
+  @Get(':groupId/swaps')
+  listSwaps(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+  ) {
+    return this.swaps.list(user.userId, groupId);
+  }
+
   @Post(':groupId/swaps')
   @RequirePermissions('ajo.swap.initiate')
   createSwap(

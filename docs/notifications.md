@@ -32,6 +32,37 @@ Templates provide responsive inline HTML and plain text, escape user-controlled 
 and use the Ajo Cloud blue/teal brand. Password recovery and product-event templates are ready for
 their future workflows; no endpoint or successful delivery is faked before those domain events exist.
 
+## Preferences
+
+`GET` and `PUT /api/v1/users/me/notification-preferences` read and write a user's own settings.
+The read returns the whole topic-by-channel grid with defaults filled in, so a client never has to
+know the catalogue or guess a default.
+
+Topics are a closed set defined in `src/modules/notifications/domain/notification-topics.ts`, not
+free text: `NotificationPreference.topic` is a plain string column, so a client typo would
+otherwise store a row that looks saved and governs nothing. Every template is mapped to a topic or
+to the always-send set, and `topicForTemplate` throws for anything unmapped — a template added
+without being classified fails in tests rather than silently becoming unsuppressible.
+
+**Security and account-recovery messages are always sent.** Verification, sign-in codes, password
+reset and change, new-login alerts, device additions, account locks, and staff invites carry no
+topic, are never held by quiet hours, and are deliberately absent from the catalogue: someone who
+had switched off reset mail could not recover their account, a login alert delivered eight hours
+late is not an alert, and offering a switch that does nothing is worse than offering none.
+
+Preferences are opt-out, so an absent row means the user has not declined. Quiet hours are stored
+as minutes from midnight and evaluated in the user's own timezone through `Intl`, so DST and any
+future offset change are handled by the platform's tz database rather than a hardcoded offset. Both
+ends of a window are set together; one end alone describes no window and is rejected.
+
+A suppressed message writes no `Notification` row. The record describes delivery, and a message that
+was never attempted has none; storing one would also consume the dedupe key, so a later permitted
+send of the same event would be swallowed as a duplicate. `sendEmail` and `sendSms` report
+`SUPPRESSED` distinctly from `FAILED`, since nothing went wrong and a caller must not retry.
+
+Only `EMAIL` and `SMS` are configurable. `PUSH` and `IN_APP` exist in the schema but nothing
+delivers on them, and a switch for a channel that never sends would misrepresent what the app does.
+
 ## Persistence and safety
 
 Every attempted message creates a `Notification` with a template key/version, safe redacted payload,

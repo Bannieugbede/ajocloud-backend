@@ -31,8 +31,16 @@ A public engagement API (`/api/v1/engagement/waitlist` and `/api/v1/engagement/s
 captures pre-launch waitlist sign-ups (names, email, `+234` phone, promotion opt-in) and visitor
 support inquiries. Admins review both through dedicated read endpoints and the web admin console.
 
+Members can list a group's swap requests and see which await their own decision, and users can set
+per-topic email and SMS notification preferences with quiet hours. Security and account-recovery
+messages are exempt from both, by design.
+
 ## In progress
 
+Product notification delivery is **IN PROGRESS**: preferences are stored and enforced on every
+send, but only account verification, welcome, sign-in codes, and staff invites are wired to domain
+events — and all four are always-send. The preference screen is therefore correct and enforced
+while governing messages the platform does not yet emit.
 Food Ajo contributions are **IN PROGRESS**: members can enrol and withdraw, and capacity is counted
 in portions, but no route collects money against a subscription — the `FOOD_SUBSCRIPTION` payment
 target exists unused, so a programme's expected amount is what members owe rather than what has been

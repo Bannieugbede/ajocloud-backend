@@ -1,17 +1,8 @@
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../../infrastructure/database/transaction.service.js';
+import { firstArg } from '../../common/testing/mock-arguments.js';
 import { FoodAjoCoordinatorService } from './food-ajo-coordinator.service.js';
-
-/** First argument a mock was called with, typed at the call site. Jest's own
-    `mock.calls` is untyped, and asserting on captured arguments is clearer than
-    a nest of matchers. */
-function firstArg<T>(mock: unknown): T {
-  const calls = (mock as { mock: { calls: unknown[][] } }).mock.calls;
-  const call = calls[0];
-  if (!call) throw new Error('Expected the mock to have been called');
-  return call[0] as T;
-}
 
 describe('FoodAjoCoordinatorService', () => {
   const prisma = {

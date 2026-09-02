@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Environment } from '../../config/env.schema.js';
 import { ResendClientService } from '../../infrastructure/external-services/resend/resend-client.service.js';
 import { ResendEmailProvider } from '../../infrastructure/external-services/resend/resend-email.provider.js';
+import { NotificationPreferencesService } from './notification-preferences.service.js';
 import { TransactionalNotificationService } from './transactional-notification.service.js';
 import { ConsoleEmailProvider } from './providers/console-email.provider.js';
 import { ConsoleSmsProvider } from './providers/console-sms.provider.js';
@@ -11,6 +12,7 @@ import { SMS_PROVIDER } from './providers/sms-provider.js';
 
 @Module({
   providers: [
+    NotificationPreferencesService,
     ConsoleEmailProvider,
     ConsoleSmsProvider,
     ResendClientService,
@@ -32,6 +34,11 @@ import { SMS_PROVIDER } from './providers/sms-provider.js';
     },
     TransactionalNotificationService,
   ],
-  exports: [EMAIL_PROVIDER, SMS_PROVIDER, TransactionalNotificationService],
+  exports: [
+    EMAIL_PROVIDER,
+    SMS_PROVIDER,
+    TransactionalNotificationService,
+    NotificationPreferencesService,
+  ],
 })
 export class NotificationsModule {}

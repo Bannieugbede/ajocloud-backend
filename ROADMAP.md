@@ -78,7 +78,10 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Odd/even deterministic rotation schedule
 - [x] **COMPLETE** Serializable group locking
 - [x] **COMPLETE** Immutable schedule versions
-- [x] **COMPLETE** Two-owner approved/expiring/rejectable audited swaps
+- [x] **COMPLETE** Two-owner approved/expiring/rejectable audited swaps — including
+      `GET /ajo-groups/:groupId/swaps`, which reports `awaitingMyDecision` per request. Approve and
+      reject existed but nothing listed a pending swap, so one could only be acted on by a caller
+      who already knew its id.
 - [x] **COMPLETE** Versioned fee definitions and swap fee snapshots
 - [ ] **BLOCKED** Multiple payout recipients per period — allocation/default policy unapproved
 - [ ] **NOT STARTED** Contribution collection workflow
@@ -189,7 +192,9 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 ## Phase 10 — Notifications
 
 - [x] **COMPLETE** Template and template-version schema
-- [x] **COMPLETE** Channel preferences, timezones, and quiet-hours policy
+- [x] **COMPLETE** Channel preferences, timezones, and quiet-hours policy — schema, policy, and now
+      the `GET`/`PUT /users/me/notification-preferences` API, applied on every send. Security and
+      account-recovery templates carry no topic and are never suppressed or delayed.
 - [x] **COMPLETE** Delivery attempts, provider references, status, and dedupe schema/policy
 - [x] **COMPLETE** Generic email interface and safe console provider
 - [ ] **NOT STARTED** Scheduled reminder engine

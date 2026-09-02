@@ -12,7 +12,10 @@ import { StaffInviteStatus, UserStatus } from '../../../../generated/prisma/enum
 import type { Environment } from '../../../config/env.schema.js';
 import { PrismaService } from '../../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../../infrastructure/database/transaction.service.js';
-import { TransactionalNotificationService } from '../../notifications/transactional-notification.service.js';
+import {
+  TransactionalNotificationService,
+  type NotificationDeliveryOutcome,
+} from '../../notifications/transactional-notification.service.js';
 import type { InviteStaffDto } from '../dto/staff-invite.dto.js';
 import { humaniseRole } from './staff-roles.js';
 
@@ -36,7 +39,9 @@ export interface StaffInviteSummary {
    * way — the link works once delivered — but the console must not claim it was
    * sent when the provider rejected it, or nobody would think to resend.
    */
-  readonly deliveryStatus?: 'SENT' | 'FAILED';
+  /** SUPPRESSED cannot occur for a staff invite, which is an always-send
+      security template, but the delivery contract allows it. */
+  readonly deliveryStatus?: NotificationDeliveryOutcome['status'];
 }
 
 /** What the accept page needs to render before anyone types a password. */

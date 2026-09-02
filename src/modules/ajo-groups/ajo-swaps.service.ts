@@ -15,6 +15,7 @@ import {
   SwapInitiatorType,
   SwapRequestStatus,
 } from '../../../generated/prisma/enums.js';
+import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import {
   TransactionService,
   type TransactionClient,
@@ -29,7 +30,122 @@ import type { CreateSwapRequestDto, DecideSwapRequestDto } from './dto/create-sw
 
 @Injectable()
 export class AjoSwapsService {
-  constructor(private readonly transactions: TransactionService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly transactions: TransactionService,
+  ) {}
+
+  /**
+   * Swap requests on a group, newest first, with the decisions already made.
+   *
+   * Without this a member had no way to discover a swap awaiting them: the
+   * approve and reject routes existed but nothing listed what was pending, so
+   * a request could only be acted on by someone who already knew its id.
+   *
+   * `awaitingMyDecision` is computed here rather than left to the client, since
+   * it depends on who owns the two affected slots — which the client would
+   * otherwise have to re-derive and could get wrong.
+   */
+  async list(userId: string, groupId: string): Promise<unknown> {
+    const membership = await this.prisma.ajoGroupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+      select: { id: true, status: true },
+    });
+    if (!membership || membership.status !== AjoMemberStatus.ACTIVE) {
+      throw new ForbiddenException('You do not have access to this group');
+    }
+
+    const swaps = await this.prisma.swapRequest.findMany({
+      where: { groupId },
+      select: {
+        id: true,
+        status: true,
+        initiatorType: true,
+        requestedByMemberId: true,
+        fromSlotId: true,
+        toSlotId: true,
+        originalFromPosition: true,
+        originalToPosition: true,
+        proposedFromPosition: true,
+        proposedToPosition: true,
+        reason: true,
+        expiresAt: true,
+        decidedAt: true,
+        executedAt: true,
+        createdAt: true,
+        approvals: {
+          select: {
+            approverMemberId: true,
+            decision: true,
+            reason: true,
+            decidedAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    const slotIds = [...new Set(swaps.flatMap((swap) => [swap.fromSlotId, swap.toSlotId]))];
+    const slots = await this.prisma.ajoSlot.findMany({
+      where: { id: { in: slotIds } },
+      select: { id: true, position: true, memberId: true },
+    });
+    const members = await this.prisma.ajoGroupMember.findMany({
+      where: { id: { in: slots.map((slot) => slot.memberId) } },
+      select: { id: true, userId: true },
+    });
+    // AjoGroupMember stores userId without a User relation, so names are read
+    // separately. Only the display name is exposed: a member's email is not
+    // something other members of a group are entitled to see.
+    const profiles = await this.prisma.userProfile.findMany({
+      where: { userId: { in: members.map((member) => member.userId) } },
+      select: { userId: true, firstName: true, lastName: true },
+    });
+    const nameByUserId = new Map(
+      profiles.map((profile) => [
+        profile.userId,
+        `${profile.firstName} ${profile.lastName}`.trim(),
+      ]),
+    );
+    const userIdByMemberId = new Map(members.map((member) => [member.id, member.userId]));
+    const slotById = new Map(slots.map((slot) => [slot.id, slot]));
+    const describe = (slotId: string) => {
+      const slot = slotById.get(slotId);
+      const userId = slot ? userIdByMemberId.get(slot.memberId) : undefined;
+      return {
+        slotId,
+        position: slot?.position ?? null,
+        memberId: slot?.memberId ?? null,
+        displayName: (userId ? nameByUserId.get(userId) : undefined) ?? 'Member',
+      };
+    };
+
+    const now = new Date();
+    return swaps.map((swap) => {
+      const owners = [swap.fromSlotId, swap.toSlotId]
+        .map((slotId) => slotById.get(slotId)?.memberId)
+        .filter((memberId): memberId is string => Boolean(memberId));
+      const decided = swap.approvals.some(
+        (approval) => approval.approverMemberId === membership.id,
+      );
+      // An expired request is reported as expired even before the row is
+      // rewritten, so the list never invites a decision that would be refused.
+      const expired = Boolean(swap.expiresAt && swap.expiresAt <= now);
+      const status =
+        swap.status === SwapRequestStatus.PENDING && expired
+          ? SwapRequestStatus.EXPIRED
+          : swap.status;
+      return {
+        ...swap,
+        status,
+        from: describe(swap.fromSlotId),
+        to: describe(swap.toSlotId),
+        awaitingMyDecision:
+          status === SwapRequestStatus.PENDING && owners.includes(membership.id) && !decided,
+      };
+    });
+  }
 
   async create(userId: string, groupId: string, dto: CreateSwapRequestDto): Promise<unknown> {
     if (dto.fromSlotId === dto.toSlotId) {

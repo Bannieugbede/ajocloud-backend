@@ -5,6 +5,8 @@ import {
   NotificationStatus,
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
+import { decideDelivery, type SuppressionReason } from './domain/notification-policy.js';
+import { topicForTemplate } from './domain/notification-topics.js';
 import { EMAIL_PROVIDER, type EmailProvider } from './providers/email-provider.js';
 import { SMS_PROVIDER, type SmsProvider } from './providers/sms-provider.js';
 import {
@@ -23,7 +25,14 @@ interface NotificationInput {
 }
 
 export type NotificationDeliveryOutcome =
-  { readonly status: 'SENT'; readonly providerReference: string } | { readonly status: 'FAILED' };
+  | { readonly status: 'SENT'; readonly providerReference: string }
+  | { readonly status: 'FAILED' }
+  /**
+   * The user declined this topic, or it arrived inside their quiet hours.
+   * Distinct from FAILED: nothing went wrong, so a caller must not retry or
+   * treat it as an outage.
+   */
+  | { readonly status: 'SUPPRESSED'; readonly reason: SuppressionReason };
 
 @Injectable()
 export class TransactionalNotificationService {
@@ -88,6 +97,9 @@ export class TransactionalNotificationService {
       readonly accepted: boolean;
     }>;
   }): Promise<NotificationDeliveryOutcome> {
+    const suppression = await this.suppressionFor(input.userId, input.template, input.channel);
+    if (suppression) return { status: 'SUPPRESSED', reason: suppression };
+
     const existing = await this.prisma.notification.findUnique({
       where: { dedupeKey: input.dedupeKey },
     });
@@ -148,5 +160,37 @@ export class TransactionalNotificationService {
       ]);
       return { status: 'FAILED' };
     }
+  }
+
+  /**
+   * The reason this message must not be delivered, or null to proceed.
+   *
+   * Security and account-recovery templates carry no topic and are never
+   * suppressed: someone who had switched off password-reset mail could not
+   * recover their account, and a login alert held until morning is not an alert.
+   *
+   * A suppressed message writes no `Notification` row. The record exists to
+   * describe delivery, and a message that was never attempted has none; storing
+   * one would also consume the dedupe key, so a later permitted send of the same
+   * event would be silently swallowed as a duplicate.
+   */
+  private async suppressionFor(
+    userId: string,
+    template: string,
+    channel: NotificationChannel,
+  ): Promise<SuppressionReason | null> {
+    const topic = topicForTemplate(template);
+    if (topic === null) return null;
+    const preference = await this.prisma.notificationPreference.findUnique({
+      where: { userId_channel_topic: { userId, channel, topic } },
+      select: {
+        enabled: true,
+        quietHoursStartMinutes: true,
+        quietHoursEndMinutes: true,
+        timezone: true,
+      },
+    });
+    const decision = decideDelivery({ topic, preference, now: new Date() });
+    return decision.send ? null : (decision.reason ?? null);
   }
 }

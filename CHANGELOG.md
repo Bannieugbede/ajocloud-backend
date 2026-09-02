@@ -4,6 +4,19 @@
 
 ### Added
 
+- Members can see a group's swap requests at
+  `GET /api/v1/ajo-groups/:groupId/swaps`, each reporting whether it awaits
+  their own decision. Approve and reject already existed, but nothing listed a
+  pending swap, so a request could only be acted on by a caller who already knew
+  its id.
+- Users can set per-topic email and SMS notification preferences with quiet
+  hours at `GET`/`PUT /api/v1/users/me/notification-preferences`. Preferences
+  are applied on every send and evaluated in the user's own timezone.
+  Security and account-recovery messages — verification, sign-in codes, password
+  reset and change, login alerts, device additions, account locks, and staff
+  invites — are always sent, never delayed by quiet hours, and deliberately
+  absent from the topic catalogue, so nobody can switch off the mail that lets
+  them recover their account.
 - Food Ajo coordinators can now run a programme end to end. New routes under
   `/api/v1/food-ajo` cover lifecycle transitions, package edits, a procurement
   plan, purchase orders, delivery receipts, distributions, and collection
