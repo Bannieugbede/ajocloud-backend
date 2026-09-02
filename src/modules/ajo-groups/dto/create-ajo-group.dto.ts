@@ -54,11 +54,16 @@ export class CreateAjoGroupDto {
   @Max(1_000)
   minSlotsPerMember: number = 1;
 
+  /**
+   * Defaults to `maxSlots` when omitted, because a fixed default larger than the
+   * group's own capacity violates the database's capacity check. It previously
+   * defaulted to 100, which made every group with fewer than 100 slots fail.
+   */
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(1_000)
-  maxSlotsPerMember: number = 100;
+  maxSlotsPerMember?: number;
 
   @IsOptional()
   @IsString()

@@ -19,6 +19,7 @@ import {
 } from '../../../generated/prisma/enums.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
+import { assertSlotCapacity, resolveMaxSlotsPerMember } from './domain/ajo-policy.js';
 import { assertAjoGroupBounds, generateRotationSchedule } from './domain/ajo-schedule.js';
 import type { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import type { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
@@ -34,15 +35,13 @@ export class AjoGroupsService {
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
     assertAjoGroupBounds(startDate, endDate, dto.maxSlots);
-    if (dto.minSlotsPerMember > dto.maxSlotsPerMember) {
-      throw new UnprocessableEntityException('Minimum slots cannot exceed maximum slots');
-    }
-    if (dto.requestedSlots < dto.minSlotsPerMember || dto.requestedSlots > dto.maxSlotsPerMember) {
-      throw new UnprocessableEntityException('Requested slots violate per-member limits');
-    }
-    if (dto.requestedSlots > dto.maxSlots) {
-      throw new UnprocessableEntityException('Requested slots exceed group capacity');
-    }
+    const maxSlotsPerMember = resolveMaxSlotsPerMember(dto.maxSlotsPerMember, dto.maxSlots);
+    assertSlotCapacity({
+      minSlotsPerMember: dto.minSlotsPerMember,
+      maxSlotsPerMember,
+      requestedSlots: dto.requestedSlots,
+      maxSlots: dto.maxSlots,
+    });
     const contributionUnitMinor =
       dto.contributionMode === AjoContributionMode.FLEXIBLE_UNIT
         ? dto.contributionUnitMinor
@@ -66,7 +65,7 @@ export class AjoGroupsService {
           maxMembers: dto.maxMembers,
           maxSlots: dto.maxSlots,
           minSlotsPerMember: dto.minSlotsPerMember,
-          maxSlotsPerMember: dto.maxSlotsPerMember,
+          maxSlotsPerMember,
           businessTimezone: dto.businessTimezone,
           contributionOpenOffsetMinutes: dto.contributionOpenOffsetMinutes,
           contributionCloseOffsetMinutes: dto.contributionCloseOffsetMinutes,
@@ -184,10 +183,36 @@ export class AjoGroupsService {
             _count: { select: { slots: true } },
           },
         },
+        // Positions are the rotation order, and a swap is expressed as a pair of
+        // slot ids, so both are needed before either screen can be built.
+        slots: {
+          select: { id: true, memberId: true, position: true, status: true },
+          orderBy: { position: 'asc' },
+        },
       },
     });
     if (!group) throw new NotFoundException('Ajo group was not found');
-    return group;
+
+    // AjoGroupMember stores userId without a User relation, so names are read
+    // separately. Only the display name is exposed: a member's email is not
+    // something other members of a group are entitled to see.
+    const profiles = await this.prisma.userProfile.findMany({
+      where: { userId: { in: group.members.map((member) => member.userId) } },
+      select: { userId: true, firstName: true, lastName: true },
+    });
+    const nameByUserId = new Map(
+      profiles.map((profile) => [
+        profile.userId,
+        `${profile.firstName} ${profile.lastName}`.trim(),
+      ]),
+    );
+    return {
+      ...group,
+      members: group.members.map((member) => ({
+        ...member,
+        displayName: nameByUserId.get(member.userId) ?? 'Member',
+      })),
+    };
   }
 
   async join(userId: string, groupId: string, dto: JoinAjoGroupDto): Promise<unknown> {
