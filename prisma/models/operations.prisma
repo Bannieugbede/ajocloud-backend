@@ -85,12 +85,23 @@ model Notification {
   payload         Json
   templateVersion Int                 @default(1)
   dedupeKey       String?             @unique @db.VarChar(191)
+  /// Rendered once at send time so the in-app feed does not re-render a
+  /// template whose version may since have changed, which would show the user
+  /// different words from the ones they were actually sent.
+  title           String?             @db.VarChar(200)
+  body            String?             @db.VarChar(1000)
+  /// Where tapping this notification should go, as an in-app path. Never an
+  /// external URL: a server-supplied link the client follows blindly is an
+  /// open-redirect waiting to happen.
+  deepLink        String?             @db.VarChar(300)
+  readAt          DateTime?           @db.Timestamptz(6)
   sentAt          DateTime?           @db.Timestamptz(6)
   createdAt       DateTime            @default(now()) @db.Timestamptz(6)
 
   deliveries NotificationDelivery[]
 
   @@index([userId, status, createdAt])
+  @@index([userId, channel, readAt, createdAt])
   @@map("notifications")
 }
 

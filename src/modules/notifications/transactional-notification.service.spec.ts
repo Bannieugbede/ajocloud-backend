@@ -1,4 +1,5 @@
 import { NotificationChannel, NotificationStatus } from '../../../generated/prisma/enums.js';
+import { firstArg } from '../../common/testing/mock-arguments.js';
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { EmailProvider } from './providers/email-provider.js';
 import type { SmsProvider } from './providers/sms-provider.js';
@@ -11,6 +12,11 @@ function setup() {
   const deliveryCreate = jest.fn().mockResolvedValue({});
   const transaction = jest.fn().mockResolvedValue([]);
   const preferenceFindUnique = jest.fn().mockResolvedValue(null);
+  const pushSend = jest.fn().mockResolvedValue({ provider: 'console', results: [] });
+  const pushProvider = { name: 'console', send: pushSend };
+  const pushTokensFor = jest.fn().mockResolvedValue([]);
+  const releaseUnregisteredToken = jest.fn().mockResolvedValue(undefined);
+  const devices = { pushTokensFor, releaseUnregisteredToken };
   const prisma = {
     notificationPreference: { findUnique: preferenceFindUnique },
     notification: {
@@ -49,7 +55,16 @@ function setup() {
     notificationUpdate,
     deliveryCreate,
     preferenceFindUnique,
-    service: new TransactionalNotificationService(prisma, emailProvider, smsProvider),
+    pushSend,
+    pushTokensFor,
+    releaseUnregisteredToken,
+    service: new TransactionalNotificationService(
+      prisma,
+      emailProvider,
+      smsProvider,
+      pushProvider,
+      devices as never,
+    ),
   };
 }
 
@@ -199,5 +214,122 @@ describe('notification preferences', () => {
         },
       }),
     );
+  });
+});
+
+describe('push and in-app delivery', () => {
+  const notifyInput = {
+    userId: 'user-id',
+    template: 'ajo-payout-sent',
+    variables: { groupName: 'Owo Ise', amount: '₦50,000' },
+    storedPayload: { groupId: 'group-id' },
+    dedupeKey: 'ajo-payout:cycle-id',
+  };
+
+  it('writes the in-app entry even when no device can be reached', async () => {
+    // Push is a prompt to open the app, not the notification itself. Delivering
+    // only by push would mean someone who declined permission never learns
+    // their payout arrived.
+    const { service, notificationCreate, pushSend } = setup();
+    const result = await service.notify(notifyInput);
+
+    expect(result.inApp).toBe(true);
+    expect(result.pushed).toBe(0);
+    expect(pushSend).not.toHaveBeenCalled();
+    const written = firstArg<{ data: { channel: string; title: string; body: string } }>(
+      notificationCreate,
+    );
+    expect(written.data.channel).toBe(NotificationChannel.IN_APP);
+    expect(written.data.title).toBe('Your payout was sent');
+  });
+
+  it('renders the copy once, so the feed never re-renders a changed template', async () => {
+    const { service, notificationCreate } = setup();
+    await service.notify(notifyInput);
+    const written = firstArg<{ data: { body: string; deepLink: string } }>(notificationCreate);
+    expect(written.data.body).toContain('₦50,000');
+    expect(written.data.deepLink).toBe('/(tabs)/ajo');
+  });
+
+  it('pushes to every device the user holds', async () => {
+    const { service, pushSend, pushTokensFor } = setup();
+    pushTokensFor.mockResolvedValue(['ExponentPushToken[a]', 'ExponentPushToken[b]']);
+    pushSend.mockResolvedValue({
+      provider: 'expo',
+      results: [
+        { token: 'ExponentPushToken[a]', accepted: true, unregistered: false },
+        { token: 'ExponentPushToken[b]', accepted: true, unregistered: false },
+      ],
+    });
+
+    const result = await service.notify(notifyInput);
+    expect(result.pushed).toBe(2);
+  });
+
+  it('carries only routing information in the push payload', async () => {
+    // Push payloads travel through Apple's and Google's infrastructure and show
+    // on a lock screen, so nothing private belongs in them.
+    const { service, pushSend, pushTokensFor } = setup();
+    pushTokensFor.mockResolvedValue(['ExponentPushToken[a]']);
+    pushSend.mockResolvedValue({ provider: 'expo', results: [] });
+
+    await service.notify(notifyInput);
+    const sent = firstArg<{ data: Record<string, string> }>(pushSend);
+    expect(sent.data).toEqual({ deepLink: '/(tabs)/ajo' });
+  });
+
+  it('releases a token the provider says is dead', async () => {
+    const { service, pushSend, pushTokensFor, releaseUnregisteredToken } = setup();
+    pushTokensFor.mockResolvedValue(['ExponentPushToken[a]']);
+    pushSend.mockResolvedValue({
+      provider: 'expo',
+      results: [{ token: 'ExponentPushToken[a]', accepted: false, unregistered: true }],
+    });
+
+    await service.notify(notifyInput);
+    expect(releaseUnregisteredToken).toHaveBeenCalledWith('ExponentPushToken[a]');
+  });
+
+  it('keeps a token that failed for a transient reason', async () => {
+    const { service, pushSend, pushTokensFor, releaseUnregisteredToken } = setup();
+    pushTokensFor.mockResolvedValue(['ExponentPushToken[a]']);
+    pushSend.mockResolvedValue({
+      provider: 'expo',
+      results: [{ token: 'ExponentPushToken[a]', accepted: false, unregistered: false }],
+    });
+
+    await service.notify(notifyInput);
+    expect(releaseUnregisteredToken).not.toHaveBeenCalled();
+  });
+
+  it('still writes in-app when the user switched push off', async () => {
+    const { service, pushSend, preferenceFindUnique } = setup();
+    preferenceFindUnique.mockImplementation(
+      ({ where }: { where: { userId_channel_topic: { channel: string } } }) =>
+        Promise.resolve(
+          where.userId_channel_topic.channel === NotificationChannel.PUSH
+            ? {
+                enabled: false,
+                quietHoursStartMinutes: null,
+                quietHoursEndMinutes: null,
+                timezone: 'Africa/Lagos',
+              }
+            : null,
+        ),
+    );
+
+    const result = await service.notify(notifyInput);
+    expect(result.inApp).toBe(true);
+    expect(pushSend).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a template with no short-form copy', async () => {
+    // Security templates are email-only on purpose: a push saying someone
+    // signed in is useful, but a recovery link must go to a mailbox.
+    const { service, notificationCreate, pushSend } = setup();
+    const result = await service.notify({ ...notifyInput, template: 'password-reset' });
+    expect(result).toEqual({ inApp: false, pushed: 0 });
+    expect(notificationCreate).not.toHaveBeenCalled();
+    expect(pushSend).not.toHaveBeenCalled();
   });
 });

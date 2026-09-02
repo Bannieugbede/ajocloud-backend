@@ -5,15 +5,22 @@ import { ResendClientService } from '../../infrastructure/external-services/rese
 import { ResendEmailProvider } from '../../infrastructure/external-services/resend/resend-email.provider.js';
 import { NotificationPreferencesService } from './notification-preferences.service.js';
 import { TransactionalNotificationService } from './transactional-notification.service.js';
+import { ExpoPushProvider } from '../../infrastructure/external-services/expo/expo-push.provider.js';
+import { DevicesModule } from '../devices/devices.module.js';
 import { ConsoleEmailProvider } from './providers/console-email.provider.js';
+import { ConsolePushProvider } from './providers/console-push.provider.js';
+import { PUSH_PROVIDER } from './providers/push-provider.js';
 import { ConsoleSmsProvider } from './providers/console-sms.provider.js';
 import { EMAIL_PROVIDER } from './providers/email-provider.js';
 import { SMS_PROVIDER } from './providers/sms-provider.js';
 
 @Module({
+  imports: [DevicesModule],
   providers: [
     NotificationPreferencesService,
     ConsoleEmailProvider,
+    ConsolePushProvider,
+    ExpoPushProvider,
     ConsoleSmsProvider,
     ResendClientService,
     ResendEmailProvider,
@@ -31,6 +38,15 @@ import { SMS_PROVIDER } from './providers/sms-provider.js';
       // channel contract intact until one is selected.
       provide: SMS_PROVIDER,
       useExisting: ConsoleSmsProvider,
+    },
+    {
+      provide: PUSH_PROVIDER,
+      inject: [ConfigService, ConsolePushProvider, ExpoPushProvider],
+      useFactory: (
+        config: ConfigService<Environment, true>,
+        consoleProvider: ConsolePushProvider,
+        expo: ExpoPushProvider,
+      ) => (config.get('PUSH_PROVIDER', { infer: true }) === 'expo' ? expo : consoleProvider),
     },
     TransactionalNotificationService,
   ],

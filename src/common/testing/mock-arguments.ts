@@ -10,3 +10,12 @@ export function firstArg<T>(mock: unknown): T {
   if (!call) throw new Error('Expected the mock to have been called');
   return call[0] as T;
 }
+
+/** Second argument a jest mock was called with, for calls that take a client
+    plus a command. */
+export function secondArg<T>(mock: unknown): T {
+  const calls = (mock as { mock: { calls: unknown[][] } }).mock.calls;
+  const call = calls[0];
+  if (!call) throw new Error('Expected the mock to have been called');
+  return call[1] as T;
+}

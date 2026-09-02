@@ -4,6 +4,18 @@
 
 ### Added
 
+- Notifications reach people. Product events are delivered as push through Expo
+  and as in-app entries, alongside the existing email, and all four channels are
+  preference-gated per topic. **The in-app entry is written even when push fails
+  or no device is reachable** — push is a prompt to open the app, not the
+  notification itself, so someone who declined permission still sees everything.
+- Every installation registers itself at sign-in through
+  `POST /api/v1/devices`, with a push token when permission allows one. A device
+  with no token is still registered: the record is what a security review of an
+  account reads. `GET /api/v1/devices` lists them and never returns the token
+  itself; `DELETE /api/v1/devices/:deviceId` stops notifications reaching one.
+- An in-app notification feed at `GET /api/v1/notifications`, with read and
+  read-all, and an inbox screen reached from Profile.
 - **Money can now enter the platform.** A verified Monnify transaction-completion
   webhook posts to the ledger: the provider account is debited gross, the
   wallet is credited net of the platform fee, and fee revenue is credited

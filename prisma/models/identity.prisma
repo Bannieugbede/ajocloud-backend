@@ -158,19 +158,31 @@ model TransactionPin {
 }
 
 model Device {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @db.Uuid
-  fingerprint String    @db.VarChar(191)
-  name        String?   @db.VarChar(120)
-  platform    String?   @db.VarChar(64)
-  trustedAt   DateTime? @db.Timestamptz(6)
-  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(6)
-  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  fingerprint    String    @db.VarChar(191)
+  name           String?   @db.VarChar(120)
+  platform       String?   @db.VarChar(64)
+  /// Expo push token for this installation, e.g. `ExponentPushToken[...]`.
+  /// Cleared when Expo reports DeviceNotRegistered, because continuing to send
+  /// to a dead token wastes calls and hides real delivery failures.
+  pushToken      String?   @db.VarChar(255)
+  /// When the token was last accepted, so a stale registration is visible.
+  pushTokenAt    DateTime? @db.Timestamptz(6)
+  /// Set when the user declines notification permission, so the app does not
+  /// ask again on every login and the absence of a token is explained.
+  pushDeclinedAt DateTime? @db.Timestamptz(6)
+  appVersion     String?   @db.VarChar(32)
+  trustedAt      DateTime? @db.Timestamptz(6)
+  lastSeenAt     DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions Session[]
 
   @@unique([userId, fingerprint])
+  @@index([userId, pushToken])
   @@map("devices")
 }
 

@@ -5,7 +5,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | Phase                          |   Total | Complete | In progress | Blocked | Completion |
 | ------------------------------ | ------: | -------: | ----------: | ------: | ---------: |
 | 0 Foundation                   |      14 |       14 |           0 |       0 |       100% |
-| 1 Identity/security foundation |       8 |        7 |           0 |       0 |      87.5% |
+| 1 Identity/security foundation |       8 |        8 |           0 |       0 |       100% |
 | 2 Financial core               |      11 |        7 |           0 |       0 |      63.6% |
 | 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
 | 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
@@ -16,7 +16,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **123** |   **66** |       **2** |   **3** |    **54%** |
+| **Total**                      | **123** |   **67** |       **2** |   **3** |    **54%** |
 
 ## Phase 0 — Foundation
 
@@ -40,7 +40,8 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 - [x] **COMPLETE** Users
 - [x] **COMPLETE** Password authentication, email account verification, and consent recording
 - [x] **COMPLETE** Sessions and refresh-token reuse handling
-- [ ] **NOT STARTED** Device-management API (schema exists)
+- [x] **COMPLETE** Device-management API — every installation registers at sign-in with an optional
+      Expo push token; list and deregister are owner-scoped, and the token is never returned.
 - [x] **COMPLETE** Roles
 - [x] **COMPLETE** Permissions
 - [x] **COMPLETE** KYC foundation (schema/provider boundary only)
@@ -203,9 +204,10 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [x] **COMPLETE** Generic email interface and safe console provider
 - [ ] **NOT STARTED** Scheduled reminder engine
 - [ ] **NOT STARTED** BullMQ delivery retries/dead-letter operations
-- [ ] **IN PROGRESS** Full product event template catalog and delivery services — versioned welcome,
-      authentication, security, Ajo, Food Ajo, Akawo, and Bill Payment templates exist; only account
-      verification and welcome lifecycle orchestration are currently connected
+- [ ] **IN PROGRESS** Full product event template catalog and delivery services — email, push, and
+      in-app delivery all work and are preference-gated, with short-form push copy for every product
+      template. Still outstanding: the domain events that would call them. Only account
+      verification, welcome, sign-in codes, and staff invites are wired, and all four are always-send
 - [x] **COMPLETE** Brevo transactional email/SMS adapters through the official SDK with generic
       provider boundaries, validated configuration, deterministic dedupe, persisted message IDs,
       redacted failures, and safe console/mock alternatives

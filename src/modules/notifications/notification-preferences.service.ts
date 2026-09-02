@@ -5,12 +5,18 @@ import { isValidQuietHours } from './domain/notification-policy.js';
 import { NOTIFICATION_TOPICS, type NotificationTopic } from './domain/notification-topics.js';
 
 /**
- * Channels a user can currently express a preference about.
+ * Channels a user can express a preference about.
  *
- * PUSH and IN_APP are excluded: nothing delivers on them yet, and offering a
- * switch for a channel that never sends would misrepresent what the app does.
+ * SMS is included because the boundary exists and the templates are written,
+ * though no hosted SMS provider is selected yet, so those preferences are
+ * recorded and honoured but nothing sends on that channel today.
  */
-const SETTABLE_CHANNELS = [NotificationChannel.EMAIL, NotificationChannel.SMS] as const;
+const SETTABLE_CHANNELS = [
+  NotificationChannel.PUSH,
+  NotificationChannel.IN_APP,
+  NotificationChannel.EMAIL,
+  NotificationChannel.SMS,
+] as const;
 
 const DEFAULT_TIMEZONE = 'Africa/Lagos';
 

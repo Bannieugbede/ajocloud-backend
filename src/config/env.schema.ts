@@ -99,6 +99,9 @@ export const environmentSchema = z
     // Expo's push service accepts unauthenticated sends for tokens it issued, so
     // no access token is required for the default setup.
     PUSH_PROVIDER: z.enum(['mock', 'expo']).default('mock'),
+    EXPO_PUSH_BASE_URL: optionalUrl,
+    /// Only required when the Expo project turns on enhanced push security.
+    EXPO_ACCESS_TOKEN: z.string().optional(),
     AWS_REGION: z.string().optional(),
     AWS_S3_BUCKET: z.string().optional(),
     AWS_ACCESS_KEY_ID: z.string().optional(),

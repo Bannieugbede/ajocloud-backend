@@ -25,8 +25,8 @@ describe('NotificationPreferencesService', () => {
       prisma.userProfile.findUnique.mockResolvedValue({ timezone: 'Africa/Lagos' });
 
       const result = await service.list('user-id');
-      // Every topic, for each of the two settable channels.
-      expect(result.preferences).toHaveLength(NOTIFICATION_TOPICS.length * 2);
+      // Every topic, on each of the four settable channels.
+      expect(result.preferences).toHaveLength(NOTIFICATION_TOPICS.length * 4);
       expect(result.preferences.every((entry) => entry.enabled)).toBe(true);
     });
 
@@ -63,13 +63,20 @@ describe('NotificationPreferencesService', () => {
       expect(payout?.quietHoursStartMinutes).toBe(22 * 60);
     });
 
-    it('never offers a channel that cannot deliver yet', async () => {
+    it('offers every channel the platform can address', async () => {
       prisma.notificationPreference.findMany.mockResolvedValue([]);
       prisma.userProfile.findUnique.mockResolvedValue({ timezone: 'Africa/Lagos' });
 
       const result = await service.list('user-id');
       const channels = new Set(result.preferences.map((entry) => entry.channel));
-      expect(channels).toEqual(new Set([NotificationChannel.EMAIL, NotificationChannel.SMS]));
+      expect(channels).toEqual(
+        new Set([
+          NotificationChannel.PUSH,
+          NotificationChannel.IN_APP,
+          NotificationChannel.EMAIL,
+          NotificationChannel.SMS,
+        ]),
+      );
     });
 
     it('falls back to the platform timezone when the profile has none', async () => {
@@ -100,13 +107,11 @@ describe('NotificationPreferencesService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('refuses a channel that cannot deliver yet', async () => {
-      await expect(
-        service.update('user-id', [
-          { topic: 'ajo.payout', channel: NotificationChannel.PUSH, enabled: true },
-        ]),
-      ).rejects.toBeInstanceOf(UnprocessableEntityException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+    it('accepts a push preference now that push delivers', async () => {
+      await service.update('user-id', [
+        { topic: 'ajo.payout', channel: NotificationChannel.PUSH, enabled: false },
+      ]);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('validates every entry before writing any of them', async () => {

@@ -24,6 +24,7 @@ import { FoodCoordinatorApplicationsModule } from './modules/food-coordinator-ap
 import { BillPaymentsModule } from './modules/bill-payments/bill-payments.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { DevicesModule } from './modules/devices/devices.module.js';
 import { FoodAjoModule } from './modules/food-ajo/food-ajo.module.js';
 import { NotificationPreferencesModule } from './modules/notifications/notification-preferences.module.js';
 import { AkawoModule } from './modules/akawo/akawo.module.js';
@@ -60,6 +61,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     FoodCoordinatorApplicationsModule,
     BillPaymentsModule,
     NotificationsModule,
+    DevicesModule,
     FoodAjoModule,
     NotificationPreferencesModule,
     AkawoModule,

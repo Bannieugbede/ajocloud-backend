@@ -1,4 +1,4 @@
-import { firstArg } from '../../common/testing/mock-arguments.js';
+import { firstArg, secondArg } from '../../common/testing/mock-arguments.js';
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { PaymentSettlementService } from './payment-settlement.service.js';
@@ -48,9 +48,9 @@ describe('PaymentSettlementService', () => {
     const { service, postWithin } = build(processing());
     await service.settleSuccessful(REFERENCE);
 
-    const command = postWithin.mock.calls[0]?.[1] as {
+    const command = secondArg<{
       entries: { accountId: string; direction: string; amountMinor: bigint }[];
-    };
+    }>(postWithin);
     const byPurpose = (purpose: string) =>
       command.entries.find((entry) => entry.accountId === `account-${purpose}`);
 
@@ -70,9 +70,9 @@ describe('PaymentSettlementService', () => {
   it('balances the posting', async () => {
     const { service, postWithin } = build(processing());
     await service.settleSuccessful(REFERENCE);
-    const command = postWithin.mock.calls[0]?.[1] as {
+    const command = secondArg<{
       entries: { direction: string; amountMinor: bigint }[];
-    };
+    }>(postWithin);
     const sum = (direction: string) =>
       command.entries
         .filter((entry) => entry.direction === direction)
@@ -83,9 +83,9 @@ describe('PaymentSettlementService', () => {
   it('omits the fee leg entirely when nothing is charged', async () => {
     const { service, postWithin } = build(processing({ feeMinor: 0n }));
     await service.settleSuccessful(REFERENCE);
-    const command = postWithin.mock.calls[0]?.[1] as {
+    const command = secondArg<{
       entries: { accountId: string }[];
-    };
+    }>(postWithin);
     // A zero-amount row would be noise in a ledger that is never edited.
     expect(command.entries).toHaveLength(2);
     expect(
@@ -96,7 +96,7 @@ describe('PaymentSettlementService', () => {
   it('keys the posting off the intent, not the event', async () => {
     const { service, postWithin } = build(processing());
     await service.settleSuccessful(REFERENCE);
-    const command = postWithin.mock.calls[0]?.[1] as { idempotencyKey: string };
+    const command = secondArg<{ idempotencyKey: string }>(postWithin);
     // A same-payment event redelivered under a new provider event id must not
     // post a second credit; a duplicate is unrecoverable once it is spent.
     expect(command.idempotencyKey).toBe('payment-settlement:intent-1');
