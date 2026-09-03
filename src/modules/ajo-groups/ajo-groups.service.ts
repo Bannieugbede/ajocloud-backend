@@ -5,7 +5,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   AjoCycleStatus,
   AjoContributionMode,
@@ -17,19 +17,27 @@ import {
   GroupInvitationStatus,
   PayoutScheduleStatus,
 } from '../../../generated/prisma/enums.js';
+import { ConfigService } from '@nestjs/config';
+import type { Environment } from '../../config/env.schema.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { assertSlotCapacity, resolveMaxSlotsPerMember } from './domain/ajo-policy.js';
+import { digestInvitationCode } from './domain/invitation-code.js';
 import { assertAjoGroupBounds, generateRotationSchedule } from './domain/ajo-schedule.js';
 import type { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import type { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
 
 @Injectable()
 export class AjoGroupsService {
+  private readonly tokenPepper: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
-  ) {}
+    config: ConfigService<Environment, true>,
+  ) {
+    this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
+  }
 
   async create(userId: string, dto: CreateAjoGroupDto): Promise<Record<string, unknown>> {
     const startDate = new Date(dto.startDate);
@@ -502,6 +510,6 @@ export class AjoGroupsService {
   }
 
   private digest(value: string): string {
-    return createHash('sha256').update(value).digest('hex');
+    return digestInvitationCode(value, this.tokenPepper);
   }
 }

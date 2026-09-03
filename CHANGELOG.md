@@ -4,6 +4,23 @@
 
 ### Added
 
+- **A group can now be shared.** `POST /api/v1/ajo-groups/:groupId/invitations`
+  issues a link an active member can send; `GET` lists their own and `DELETE`
+  revokes one. The `GroupInvitation` schema and the join path that consumes it
+  already existed, but nothing issued a code — so a group could only be joined
+  by someone who somehow already held one.
+- `GET /api/v1/invitations/:code` describes a group to an unauthenticated
+  recipient — who invited them, what it costs, how many have joined — and
+  deliberately no group id and no membership detail, because whoever holds a
+  forwarded link is a stranger to that group. Every unusable invitation
+  (missing, revoked, expired, spent) is reported identically, so a guessed code
+  cannot be used to learn that a group exists.
+- `GET /api/v1/ajo-groups/invitations/:code/group` resolves a code to its group
+  for a signed-in caller, so accepting an invitation never asks anyone to type
+  a group id the link already implies.
+- A public web page at `/join/<code>` for recipients who do not have the app.
+  It names the group and the inviter, offers to hand the invitation to the app
+  if it is installed, and points at both stores if not.
 - Notifications reach people. Product events are delivered as push through Expo
   and as in-app entries, alongside the existing email, and all four channels are
   preference-gated per topic. **The in-app entry is written even when push fails

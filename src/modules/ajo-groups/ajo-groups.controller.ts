@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -10,6 +21,8 @@ import { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
 import { CreateSwapRequestDto, DecideSwapRequestDto } from './dto/create-swap-request.dto.js';
 import { AjoSwapsService } from './ajo-swaps.service.js';
+import { CreateGroupInvitationDto } from './dto/create-group-invitation.dto.js';
+import { GroupInvitationsService } from './group-invitations.service.js';
 
 @ApiTags('ajo-groups')
 @ApiBearerAuth()
@@ -19,6 +32,7 @@ export class AjoGroupsController {
   constructor(
     private readonly groups: AjoGroupsService,
     private readonly swaps: AjoSwapsService,
+    private readonly invitations: GroupInvitationsService,
   ) {}
 
   @Post()
@@ -30,6 +44,18 @@ export class AjoGroupsController {
   @Get()
   list(@CurrentUser() user: AuthenticatedUser) {
     return this.groups.list(user.userId);
+  }
+
+  /**
+   * Resolves an invitation code to the group it admits.
+   *
+   * Authenticated, unlike the public preview: this hands back a group id, which
+   * is what the join call needs and what the anonymous preview deliberately
+   * withholds.
+   */
+  @Get('invitations/:code/group')
+  resolveInvitation(@Param('code') code: string) {
+    return this.invitations.resolveGroup(code);
   }
 
   @Get(':groupId')
@@ -44,6 +70,37 @@ export class AjoGroupsController {
     @Body() dto: JoinAjoGroupDto,
   ) {
     return this.groups.join(user.userId, groupId, dto);
+  }
+
+  /**
+   * Issues a shareable invitation link. The code is returned once, here: only
+   * its digest is stored, so it cannot be recovered afterwards.
+   */
+  @Post(':groupId/invitations')
+  createInvitation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Body() dto: CreateGroupInvitationDto,
+  ) {
+    return this.invitations.create(user.userId, groupId, dto);
+  }
+
+  @Get(':groupId/invitations')
+  listInvitations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+  ) {
+    return this.invitations.list(user.userId, groupId);
+  }
+
+  @Delete(':groupId/invitations/:invitationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  revokeInvitation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('invitationId', ParseUUIDPipe) invitationId: string,
+  ): Promise<void> {
+    return this.invitations.revoke(user.userId, groupId, invitationId);
   }
 
   @Post(':groupId/lock')

@@ -69,7 +69,11 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and [ADR-002](docs/adr/ADR-002-flexible-ajo-contribution-model.md).
 
 - [x] **COMPLETE** Group lifecycle foundation
-- [x] **COMPLETE** Invitations
+- [x] **COMPLETE** Invitations — `POST/GET/DELETE /ajo-groups/:groupId/invitations` issue, list and
+      revoke shareable links; `GET /invitations/:code` describes the group to an unauthenticated
+      recipient, and `GET /ajo-groups/invitations/:code/group` resolves the code for a signed-in
+      one. The code is stored only as a peppered HMAC and returned once. The schema existed but
+      nothing issued a link, so a group could only be joined by someone who already held a code.
 - [x] **COMPLETE** Memberships
 - [x] **COMPLETE** More-than-100 and up-to-1,000 slot capacity
 - [x] **COMPLETE** Unique-member versus active-slot separation
