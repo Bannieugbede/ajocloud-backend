@@ -38,15 +38,9 @@ services:
       migrate:
         condition: service_completed_successfully
     networks:
-      # `default` reaches rabbitmq, which is defined in this file. `coolify`
-      # reaches Postgres and Redis, which are separate Coolify resources on a
-      # network this project does not create. Without the second entry the
-      # internal hostnames in DATABASE_URL and REDIS_URL do not resolve, and
-      # every query fails while the process itself still starts.
       - default
       - coolify
     environment:
-      # --- Routing (Coolify reads SERVICE_FQDN_API to issue TLS) -------------
       SERVICE_FQDN_API: ${API_DOMAIN}
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -59,13 +53,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-}
       SESSION_COOKIE_SAMESITE_NONE: ${SESSION_COOKIE_SAMESITE_NONE:-false}
-
-      # --- Datastores --------------------------------------------------------
-      # Use the internal hostnames Coolify assigns so traffic stays on its
-      # private network.
+      
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in the deployment environment}@rabbitmq:5672
 
       # --- Secrets (each must be a distinct 32+ character random string) -----
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
@@ -99,10 +90,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_SENDER_EMAIL: ${RESEND_SENDER_EMAIL:-}
       RESEND_SENDER_NAME: ${RESEND_SENDER_NAME:-Ajo Cloud}
-
-      # Required when PAYMENT_PROVIDER, BILL_PAYMENT_PROVIDER, or KYC_PROVIDER
-      # is monnify. Monnify is the single payments, verification, and payout
-      # provider (ADR-005).
+      
       MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-}
       MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
       MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
@@ -137,22 +125,18 @@ services:
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ajocloud}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-hj7fwskmkmezuvgfqclfutix}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
-      interval: 15s
+      interval: 10s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 120s
 
 networks:
-  # Created by this project; carries traffic between the services defined here.
   default:
-  # Pre-existing network owned by the Postgres and Redis resources. `external`
-  # means compose joins it rather than creating it, so the name must match the
-  # one Coolify shows on those resources.
   coolify:
     external: true
     name: ${COOLIFY_NETWORK:-coolify}
