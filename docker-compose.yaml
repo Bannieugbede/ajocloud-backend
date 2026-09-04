@@ -124,8 +124,9 @@ services:
     image: rabbitmq:4-alpine
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ajocloud}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-hj7fwskmkmezuvgfqclfutix}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-ajocloud}:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
