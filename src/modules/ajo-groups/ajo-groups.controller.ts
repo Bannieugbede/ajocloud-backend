@@ -20,7 +20,9 @@ import { AjoGroupsService } from './ajo-groups.service.js';
 import { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
 import { CreateSwapRequestDto, DecideSwapRequestDto } from './dto/create-swap-request.dto.js';
+import { AjoSettlementService } from './ajo-settlement.service.js';
 import { AjoSwapsService } from './ajo-swaps.service.js';
+import { PayContributionDto } from './dto/pay-contribution.dto.js';
 import { CreateGroupInvitationDto } from './dto/create-group-invitation.dto.js';
 import { GroupInvitationsService } from './group-invitations.service.js';
 
@@ -33,6 +35,7 @@ export class AjoGroupsController {
     private readonly groups: AjoGroupsService,
     private readonly swaps: AjoSwapsService,
     private readonly invitations: GroupInvitationsService,
+    private readonly settlement: AjoSettlementService,
   ) {}
 
   @Post()
@@ -101,6 +104,33 @@ export class AjoGroupsController {
     @Param('invitationId', ParseUUIDPipe) invitationId: string,
   ): Promise<void> {
     return this.invitations.revoke(user.userId, groupId, invitationId);
+  }
+
+  /**
+   * Pays one of the caller's own contributions from their wallet. Partial
+   * payment is allowed; the schedule advances to PAID only when it is whole.
+   */
+  @Post(':groupId/contributions/:scheduleId/pay')
+  payContribution(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('scheduleId', ParseUUIDPipe) scheduleId: string,
+    @Body() dto: PayContributionDto,
+  ) {
+    return this.settlement.payContribution(user.userId, groupId, scheduleId, dto);
+  }
+
+  /**
+   * Pays a cycle's pool to the slot whose turn it is. Refused, and the schedule
+   * held, unless every contribution in that cycle has been settled (ADR-011).
+   */
+  @Post(':groupId/payouts/:payoutScheduleId/execute')
+  executePayout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Param('payoutScheduleId', ParseUUIDPipe) payoutScheduleId: string,
+  ) {
+    return this.settlement.executePayout(user.userId, groupId, payoutScheduleId);
   }
 
   @Post(':groupId/lock')

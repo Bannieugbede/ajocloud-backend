@@ -4,6 +4,24 @@
 
 ### Added
 
+- **An Ajo group can now collect and pay out.** The rotation, the schedule and
+  the ledger all existed; nothing moved money between them. `POST /api/v1/ajo-groups/:groupId/contributions/:scheduleId/pay`
+  debits a member's wallet into a per-group pool, and
+  `POST /api/v1/ajo-groups/:groupId/payouts/:payoutScheduleId/execute` pays that
+  pool to the slot whose turn it is.
+- **A payout is refused unless the whole cycle has been collected**, and its
+  schedule is held rather than failed. ADR-001 gives the platform no liquidity
+  float, and a pool can cover this recipient while another member still owes —
+  paying then spends a later recipient's turn to fund this one. Two guards:
+  the schedule check is the business rule, the pool-balance check is the
+  invariant that stops the platform ever funding a difference.
+- No fee is charged on either. The deposit already paid one (ADR-009), and a
+  recipient must receive exactly `N x contribution` for ADR-001's arithmetic to
+  hold.
+- A contribution screen in the app, offering the outstanding amount or a part
+  payment. It goes straight to these routes: the shared payment flow's
+  `AJO_CONTRIBUTION` target still throws "not available yet" server-side, so it
+  would have taken a member to a dead end.
 - **A group can now be shared.** `POST /api/v1/ajo-groups/:groupId/invitations`
   issues a link an active member can send; `GET` lists their own and `DELETE`
   revokes one. The `GroupInvitation` schema and the join path that consumes it

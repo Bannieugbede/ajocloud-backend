@@ -113,6 +113,11 @@ enum FinancialAccountPurpose {
   PROVIDER_PAYABLE
   PLATFORM_FEE_REVENUE
   REFERRAL_REWARD_EXPENSE
+  /// Holds one Ajo group's contributions between collection and payout. A
+  /// liability: the money belongs to the members. Deliberately not attached to
+  /// a wallet, so a group can never acquire the withdraw or spend capabilities
+  /// a wallet carries. See ADR-011.
+  AJO_GROUP_POOL
 }
 
 enum LedgerTransactionStatus {

@@ -7,7 +7,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 0 Foundation                   |      14 |       14 |           0 |       0 |       100% |
 | 1 Identity/security foundation |       8 |        8 |           0 |       0 |       100% |
 | 2 Financial core               |      11 |        7 |           0 |       0 |      63.6% |
-| 3 Traditional Ajo              |      18 |       15 |           0 |       1 |      83.3% |
+| 3 Traditional Ajo              |      18 |       17 |           0 |       1 |      94.4% |
 | 4 Administration               |       6 |        1 |           0 |       0 |      16.7% |
 | 5 Food Ajo                     |      13 |        8 |           2 |       0 |      61.5% |
 | 6 Akawo                        |       8 |        4 |           1 |       0 |        50% |
@@ -16,7 +16,7 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 | 9 Referrals/rewards            |       5 |        1 |           0 |       0 |        20% |
 | 10 Notifications               |       8 |        5 |           1 |       0 |      62.5% |
 | 11 Scale/resilience            |      13 |        0 |           0 |       0 |         0% |
-| **Total**                      | **123** |   **67** |       **2** |   **3** |    **54%** |
+| **Total**                      | **123** |   **69** |       **2** |   **3** |    **56%** |
 
 ## Phase 0 — Foundation
 
@@ -91,8 +91,16 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
       who already knew its id.
 - [x] **COMPLETE** Versioned fee definitions and swap fee snapshots
 - [ ] **BLOCKED** Multiple payout recipients per period — allocation/default policy unapproved
-- [ ] **NOT STARTED** Contribution collection workflow
-- [ ] **NOT STARTED** Payout execution/default workflow
+- [x] **COMPLETE** Contribution collection workflow — `POST /ajo-groups/:groupId/contributions/:scheduleId/pay`
+      debits the member's wallet and credits a per-group pool account in one serializable
+      transaction. The balance is re-read inside it and an overdraft refused, because a negative
+      member balance is a platform float by another name (ADR-001). Part payment is supported;
+      the schedule reaches PAID only when the amounts agree.
+- [x] **COMPLETE** Payout execution — `POST /ajo-groups/:groupId/payouts/:payoutScheduleId/execute`
+      pays a cycle's pool to the slot whose turn it is, and refuses unless every contribution in
+      that cycle is settled, holding the schedule instead. Two guards: the schedule check is the
+      business rule, the pool-balance check is the invariant (ADR-011). Default handling beyond
+      HELD — penalties, removing a defaulter — still needs its own ADR.
 
 ## Phase 4 — Administration
 

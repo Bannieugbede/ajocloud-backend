@@ -478,6 +478,9 @@ export class AjoGroupsService {
               ? {}
               : { slot: { memberId: membership.id } },
           select: {
+            // The id is what a member pays against, so without it the schedule
+            // describes an obligation nothing can discharge.
+            id: true,
             slotId: true,
             amountDueMinor: true,
             amountPaidMinor: true,
@@ -488,6 +491,7 @@ export class AjoGroupsService {
         payoutSchedules: {
           where: { scheduleVersion: group.scheduleVersion },
           select: {
+            id: true,
             slotId: true,
             amountDueMinor: true,
             amountPaidMinor: true,
