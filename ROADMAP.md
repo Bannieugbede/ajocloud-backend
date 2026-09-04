@@ -218,8 +218,11 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 - [ ] **NOT STARTED** BullMQ delivery retries/dead-letter operations
 - [ ] **IN PROGRESS** Full product event template catalog and delivery services — email, push, and
       in-app delivery all work and are preference-gated, with short-form push copy for every product
-      template. Still outstanding: the domain events that would call them. Only account
-      verification, welcome, sign-in codes, and staff invites are wired, and all four are always-send
+      template. Three product events now emit: an Ajo payout sent, a wallet funded by a settled
+      deposit, and a KYC decision. Each is sent after its transaction commits and never awaited, so
+      a notification provider being down cannot undo or appear to fail the money movement. Still
+      outstanding: contribution reminders and Akawo progress need a scheduler rather than a request,
+      and Food distribution and Bill Payment have no emitter yet.
 - [x] **COMPLETE** Brevo transactional email/SMS adapters through the official SDK with generic
       provider boundaries, validated configuration, deterministic dedupe, persisted message IDs,
       redacted failures, and safe console/mock alternatives

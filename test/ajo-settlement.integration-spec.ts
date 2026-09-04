@@ -19,6 +19,7 @@ import {
 import type { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../src/infrastructure/database/transaction.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
+import type { TransactionalNotificationService } from '../src/modules/notifications/transactional-notification.service.js';
 import { AjoSettlementService } from '../src/modules/ajo-groups/ajo-settlement.service.js';
 
 const runDatabaseTests =
@@ -54,10 +55,17 @@ describeWithDatabase('Ajo contribution and payout settlement (PostgreSQL integra
   };
 
   const ledger = new LedgerService(transactions as unknown as TransactionService);
+  // Stubbed: delivery has its own tests, and these assert money movement. A
+  // real provider here would also try to reach Expo from a test run.
+  const notifications = {
+    notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 0 }),
+  } as unknown as TransactionalNotificationService;
+
   const service = new AjoSettlementService(
     prisma as unknown as PrismaService,
     transactions as unknown as TransactionService,
     ledger,
+    notifications,
   );
 
   const CONTRIBUTION = 500_000n; // ₦5,000

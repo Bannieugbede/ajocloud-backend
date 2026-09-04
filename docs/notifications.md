@@ -136,10 +136,38 @@ Account verification uses email only, and activation triggers a welcome email. V
 failure is returned to the auth flow; welcome failure is recorded but does not invalidate an already
 verified account/session.
 
+## Product events
+
+Three domain events emit product notifications: `ajo-payout-sent` when a payout
+executes, `wallet-funded` when a deposit settles, and `kyc-approved`/`kyc-rejected`
+when a compliance review concludes.
+
+Each is sent **after** its transaction commits, never inside it: a notification
+sent from within announces money that can still roll back, and it cannot be
+unsent. None is awaited, because the money has already moved — a push provider
+being down must not make a completed payout or a settled deposit look failed to
+its caller.
+
+Dedupe keys come from the thing that happened (the payout id, the payment intent
+id, the decision instant) rather than from the request, so a redelivered webhook
+or a retried execution cannot notify twice.
+
+Copy is written for a lock screen. The wallet-funded message quotes the credited
+amount rather than the gross, so it matches the balance the recipient will see;
+the KYC messages carry none of the reviewer's reason, which is written for an
+internal audit trail. `formatMoney` and `formatDueDate` in
+`domain/notification-money.ts` render amounts and dates — the latter in the
+group's own timezone, so a contribution due on the 1st in Lagos is not announced
+as due on the 31st.
+
+A send is fire-and-forget, so one lost to a transient failure is not retried.
+The outbox table exists and a worker consuming it is the durable answer.
+
 ## Remaining production work
 
 Before production, verify the sender domain in Resend (SPF/DKIM records), move credentials to a
 secret manager, configure deliverability alerts, and implement authenticated replay-resistant
 delivery webhooks. Selecting an SMS provider remains open work. Scheduled reminders,
-BullMQ retry/dead-letter processing, preference/quiet-hour enforcement, and remaining domain-event
-orchestration are still roadmap work.
+BullMQ retry/dead-letter processing, and the remaining domain-event emitters — contribution
+reminders and Akawo progress need a scheduler rather than a request, and Food distribution and
+Bill Payment have templates but no emitter — are still roadmap work.

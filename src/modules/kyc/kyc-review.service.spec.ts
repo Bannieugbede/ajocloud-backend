@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { firstArg } from '../../common/testing/mock-arguments.js';
 import { KycReviewService } from './kyc-review.service.js';
 
 /**
@@ -95,8 +96,9 @@ function build(seed: ProfileSeed = {}) {
     serializable: <T>(operation: (client: unknown) => Promise<T>): Promise<T> => operation(tx),
   };
 
-  const service = new KycReviewService({} as never, transactions as never);
-  return { service, calls, transactions };
+  const notifications = { notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 1 }) };
+  const service = new KycReviewService({} as never, transactions as never, notifications as never);
+  return { service, calls, transactions, notifications };
 }
 
 describe('KycReviewService.approve', () => {
@@ -190,6 +192,65 @@ describe('KycReviewService decisions other than approval', () => {
     const { service, calls } = build();
     await service.reject('reviewer-1', 'kyc-1', { reason: 'Failed checks' } as never);
     expect(firstCall(calls.profileUpdate)[0].data.verifiedAt).toBeUndefined();
+  });
+});
+
+describe('KycReviewService notifications', () => {
+  it('tells the applicant when they are approved', async () => {
+    const { service, notifications } = build();
+    await service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_2' } as never);
+
+    const sent = firstArg<{
+      userId: string;
+      template: string;
+      storedPayload: Record<string, string>;
+    }>(notifications.notify);
+    expect(sent.template).toBe('kyc-approved');
+    expect(sent.userId).toBe('user-1');
+  });
+
+  it('tells the applicant when they are rejected', async () => {
+    const { service, notifications } = build();
+    await service.reject('reviewer-1', 'kyc-1', { reason: 'Blurred document' } as never);
+
+    expect(firstArg<{ template: string }>(notifications.notify).template).toBe('kyc-rejected');
+  });
+
+  it('never carries the reviewer’s reason into the notification', async () => {
+    // The reason is written for an internal audit trail. A push payload crosses
+    // Apple's and Google's infrastructure and shows on a lock screen.
+    const { service, notifications } = build();
+    await service.reject('reviewer-1', 'kyc-1', { reason: 'Suspected forgery' } as never);
+
+    expect(JSON.stringify(firstArg(notifications.notify))).not.toContain('Suspected forgery');
+  });
+
+  it.each([['escalate'], ['requestInformation']] as const)(
+    'does not notify on %s, which settles nothing',
+    async (method) => {
+      // These move a profile without concluding it. "Verification needs
+      // attention" for an internal escalation would be alarming and untrue.
+      const { service, notifications } = build();
+      await service[method]('reviewer-1', 'kyc-1', { reason: 'Needs a look' } as never);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not notify when the decision was refused', async () => {
+    const { service, notifications } = build({ status: 'VERIFIED' });
+    await expect(
+      service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_2' } as never),
+    ).rejects.toThrow();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('still records the decision when notifying rejects', async () => {
+    const { service, notifications } = build();
+    notifications.notify.mockRejectedValue(new Error('unreachable'));
+
+    await expect(
+      service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_2' } as never),
+    ).resolves.toMatchObject({ status: 'VERIFIED' });
   });
 });
 

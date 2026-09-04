@@ -21,6 +21,8 @@ import {
   type TransactionClient,
 } from '../../infrastructure/database/transaction.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
+import { formatMoney } from '../notifications/domain/notification-money.js';
+import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import {
   assertContributionAmount,
   canExecutePayout,
@@ -39,6 +41,21 @@ import type { PayContributionDto } from './dto/pay-contribution.dto.js';
  * hold is written afterwards by the caller. Carrying the eventual HTTP shape on
  * the error keeps that decision next to the reason for it.
  */
+/** What a settled payout hands back for notifying, once the commit is safe. */
+interface PayoutNotification {
+  readonly userId: string;
+  readonly groupName: string;
+  readonly amountMinor: bigint;
+  readonly currency: string;
+  readonly payoutId: string;
+}
+
+interface SettledPayout {
+  readonly view: Record<string, unknown>;
+  /** Null for a retry, which has already notified. */
+  readonly notify: PayoutNotification | null;
+}
+
 class PayoutHeldError extends Error {
   constructor(
     message: string,
@@ -63,6 +80,7 @@ export class AjoSettlementService {
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
     private readonly ledger: LedgerService,
+    private readonly notifications: TransactionalNotificationService,
   ) {}
 
   /**
@@ -216,8 +234,9 @@ export class AjoSettlementService {
     groupId: string,
     payoutScheduleId: string,
   ): Promise<Record<string, unknown>> {
+    let settled: SettledPayout;
     try {
-      return await this.settlePayout(userId, groupId, payoutScheduleId);
+      settled = await this.settlePayout(userId, groupId, payoutScheduleId);
     } catch (error) {
       if (!(error instanceof PayoutHeldError)) throw error;
       // The transaction has rolled back by now, so this write survives. Held
@@ -229,13 +248,37 @@ export class AjoSettlementService {
       });
       throw new error.httpError(error.message);
     }
+
+    // After the transaction, never inside it: a notification sent from within
+    // would announce a payout that could still roll back, and it cannot be
+    // unsent. A failure to notify must not undo a payout that has happened, so
+    // this is deliberately not awaited into the response.
+    if (settled.notify) {
+      const { userId: recipientId, groupName, amountMinor, currency, payoutId } = settled.notify;
+      void this.notifications
+        .notify({
+          userId: recipientId,
+          template: 'ajo-payout-sent',
+          variables: { groupName, amount: formatMoney(amountMinor, currency) },
+          storedPayload: { payoutId, groupId },
+          // Derived from the payout, so a retried request that reaches this
+          // point again cannot produce a second notification.
+          dedupeKey: `ajo-payout-sent:${payoutId}`,
+        })
+        .catch(() => {
+          // Swallowed on purpose: notify already records its own failures, and
+          // the money has moved either way.
+        });
+    }
+
+    return settled.view;
   }
 
   private async settlePayout(
     userId: string,
     groupId: string,
     payoutScheduleId: string,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<SettledPayout> {
     return this.transactions.serializable(async (tx) => {
       const schedule = await tx.payoutSchedule.findUnique({
         where: { id: payoutScheduleId },
@@ -252,7 +295,8 @@ export class AjoSettlementService {
       // legitimate retry with a conflict instead of the payout it already made.
       const idempotencyKey = payoutIdempotencyKey(payoutScheduleId);
       const existing = await tx.payout.findUnique({ where: { idempotencyKey } });
-      if (existing) return this.view(existing);
+      // A retry has already notified, so it carries no notification.
+      if (existing) return { view: this.view(existing), notify: null };
 
       if (!canExecutePayout(schedule.status)) {
         throw new ConflictException('That payout has already been settled');
@@ -276,6 +320,11 @@ export class AjoSettlementService {
         select: { userId: true },
       });
       if (!recipient) throw new NotFoundException('The payout recipient was not found');
+
+      const group = await tx.ajoGroup.findUniqueOrThrow({
+        where: { id: groupId },
+        select: { name: true },
+      });
 
       const poolAccount = await this.poolAccount(tx, groupId, schedule.currency);
       const walletAccount = await this.memberWalletAccount(tx, recipient.userId, schedule.currency);
@@ -346,7 +395,16 @@ export class AjoSettlementService {
         },
       });
 
-      return this.view(payout);
+      return {
+        view: this.view(payout),
+        notify: {
+          userId: recipient.userId,
+          groupName: group.name,
+          amountMinor: schedule.amountDueMinor,
+          currency: schedule.currency,
+          payoutId: payout.id,
+        },
+      };
     });
   }
 

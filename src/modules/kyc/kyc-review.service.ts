@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { KycCheckStatus, type KycStatus, type KycTier } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
+import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import {
   TransactionService,
   type TransactionClient,
@@ -32,6 +33,7 @@ export class KycReviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
+    private readonly notifications: TransactionalNotificationService,
   ) {}
 
   /** The queue: profiles awaiting a decision, oldest submission first. */
@@ -136,7 +138,7 @@ export class KycReviewService {
     reason: string,
     grantedTier?: KycTier,
   ): Promise<unknown> {
-    return this.transactions.serializable(async (tx) => {
+    const decided = await this.transactions.serializable(async (tx) => {
       const profile = await tx.kycProfile.findUnique({
         where: { id: kycProfileId },
         select: {
@@ -210,8 +212,38 @@ export class KycReviewService {
         toStatus: nextStatus,
         ...(decision === 'APPROVE' ? { tier } : {}),
       });
-      return updated;
+      return { updated, subjectUserId: profile.userId, decidedAt: now };
     });
+
+    // After the transaction, never inside it: telling someone they are verified
+    // is not something that can be unsent if the decision rolls back.
+    //
+    // Only the settled outcomes are announced. REQUEST_INFORMATION and ESCALATE
+    // move a profile without concluding it, and a push saying "verification
+    // needs attention" for an internal escalation would be both alarming and
+    // untrue.
+    const template =
+      decision === 'APPROVE' ? 'kyc-approved' : decision === 'REJECT' ? 'kyc-rejected' : null;
+    if (template) {
+      void this.notifications
+        .notify({
+          userId: decided.subjectUserId,
+          template,
+          variables: {},
+          // The reviewer's reason is deliberately not carried: it is written for
+          // an internal audit trail, and a push payload crosses Apple's and
+          // Google's infrastructure and shows on a lock screen.
+          storedPayload: { kycProfileId },
+          // The decision instant, so a profile re-decided later notifies again
+          // while a retried request within one decision does not.
+          dedupeKey: `${template}:${kycProfileId}:${decided.decidedAt.toISOString()}`,
+        })
+        .catch(() => {
+          // notify records its own failures; the decision stands either way.
+        });
+    }
+
+    return decided.updated;
   }
 
   private levelForTier(tier: KycTier): number {

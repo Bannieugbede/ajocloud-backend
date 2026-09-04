@@ -22,14 +22,16 @@ function build(intent: Record<string, unknown> | null) {
   const prisma = {
     paymentIntent: { findUnique: jest.fn().mockResolvedValue(intent), update: intentUpdate },
   };
+  const notifications = { notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 1 }) };
   const service = new PaymentSettlementService(
     prisma as unknown as PrismaService,
     {
       serializable: (operation: (client: typeof tx) => unknown) => operation(tx),
     } as unknown as TransactionService,
     { postWithin } as never,
+    notifications as never,
   );
-  return { service, prisma, tx, postWithin, intentUpdate };
+  return { service, prisma, tx, postWithin, intentUpdate, notifications };
 }
 
 const processing = (overrides: Record<string, unknown> = {}) => ({
@@ -121,6 +123,63 @@ describe('PaymentSettlementService', () => {
       intentId: 'intent-1',
     });
     expect(postWithin).not.toHaveBeenCalled();
+  });
+
+  it('tells the user their wallet was funded, quoting the credited amount', async () => {
+    const { service, notifications } = build(processing());
+    await service.settleSuccessful(REFERENCE);
+
+    const sent = firstArg<{
+      userId: string;
+      template: string;
+      variables: Record<string, string>;
+      dedupeKey: string;
+    }>(notifications.notify);
+    expect(sent.template).toBe('wallet-funded');
+    // The net figure, not the ₦15,000 gross: this is what reached the wallet,
+    // and quoting the pre-fee amount would not match the balance they see.
+    expect(sent.variables.amount).toBe('₦14,675.00');
+  });
+
+  it('keys the notification off the intent, so a redelivered webhook cannot notify twice', async () => {
+    const { service, notifications } = build(processing());
+    await service.settleSuccessful(REFERENCE);
+
+    const sent = firstArg<{ dedupeKey: string }>(notifications.notify);
+    expect(sent.dedupeKey).toBe('wallet-funded:intent-1');
+  });
+
+  it('does not notify for an intent that already succeeded', async () => {
+    const { service, notifications } = build({ ...processing(), status: 'SUCCEEDED' });
+    await service.settleSuccessful(REFERENCE);
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('does not notify when the in-transaction re-check finds it already settled', async () => {
+    // Two webhook deliveries can both pass the check before the transaction.
+    // The one that loses the race must not announce a credit it did not make.
+    const { service, tx, notifications } = build(processing());
+    tx.paymentIntent.findUnique.mockResolvedValue({ ...processing(), status: 'SUCCEEDED' });
+
+    await service.settleSuccessful(REFERENCE);
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('does not notify when nothing matched the reference', async () => {
+    const { service, notifications } = build(null);
+    await service.settleSuccessful(REFERENCE);
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('still settles when notifying rejects', async () => {
+    // The money has entered the platform. A push provider being down must not
+    // make a settled deposit look failed to the webhook caller.
+    const { service, notifications } = build(processing());
+    notifications.notify.mockRejectedValue(new Error('unreachable'));
+
+    await expect(service.settleSuccessful(REFERENCE)).resolves.toMatchObject({
+      status: 'SETTLED',
+    });
   });
 
   it('reports an unmatched reference rather than guessing', async () => {

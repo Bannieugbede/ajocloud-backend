@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Notifications now actually arrive.** The delivery path, preferences,
+  templates and inbox all worked, but nothing called `notify` — so the inbox was
+  empty in practice. Three product events emit now: an Ajo payout sent, a wallet
+  funded by a settled deposit, and a KYC decision.
+- Each is sent **after** its transaction commits and is deliberately not
+  awaited. Sending from inside would announce money that could still roll back,
+  and a notification cannot be unsent; awaiting it would let a push provider
+  being down make a completed payout or a settled deposit look failed to the
+  caller.
+- The wallet-funded message quotes the **credited** amount, not the gross, so it
+  matches the balance the recipient will see. A KYC notification deliberately
+  carries none of the reviewer's reason: that is written for an internal audit
+  trail, and a push payload shows on a lock screen.
 - **An Ajo group can now collect and pay out.** The rotation, the schedule and
   the ledger all existed; nothing moved money between them. `POST /api/v1/ajo-groups/:groupId/contributions/:scheduleId/pay`
   debits a member's wallet into a per-group pool, and

@@ -8,6 +8,7 @@ import type { LedgerService } from '../ledger/ledger.service.js';
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { firstArg, secondArg } from '../../common/testing/mock-arguments.js';
+import type { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import { AjoSettlementService } from './ajo-settlement.service.js';
 
 describe('AjoSettlementService', () => {
@@ -18,6 +19,7 @@ describe('AjoSettlementService', () => {
     contribution: { findUnique: jest.fn(), create: jest.fn() },
     payout: { findUnique: jest.fn(), create: jest.fn() },
     financialAccount: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
+    ajoGroup: { findUniqueOrThrow: jest.fn() },
     wallet: { findUnique: jest.fn() },
     auditLog: { create: jest.fn() },
   };
@@ -33,10 +35,13 @@ describe('AjoSettlementService', () => {
   // because throwing rolls that transaction back.
   const prisma = { payoutSchedule: { update: jest.fn() } };
 
+  const notifications = { notify: jest.fn() };
+
   const service = new AjoSettlementService(
     prisma as unknown as PrismaService,
     transactions as unknown as TransactionService,
     ledger as unknown as LedgerService,
+    notifications as unknown as TransactionalNotificationService,
   );
 
   const schedule = {
@@ -70,6 +75,8 @@ describe('AjoSettlementService', () => {
     tx.contribution.create.mockResolvedValue({ id: 'contrib-1', amountMinor: 500_000n });
     tx.contributionSchedule.update.mockResolvedValue({});
     tx.auditLog.create.mockResolvedValue({});
+    notifications.notify.mockResolvedValue({ inApp: true, pushed: 1 });
+    tx.ajoGroup.findUniqueOrThrow.mockResolvedValue({ name: 'Lagos Traders' });
     ledger.accountBalanceWithin.mockResolvedValue(1_000_000n);
     ledger.postWithin.mockResolvedValue({ id: 'ledger-1', reference: 'AJO-CONTRIB-x' });
   });
@@ -381,6 +388,73 @@ describe('AjoSettlementService', () => {
       );
       expect(update.data.status).toBe('PAID');
       expect(update.data.amountPaidMinor).toBe(1_500_000n);
+    });
+
+    it('tells the recipient their payout was sent', async () => {
+      await service.executePayout('user-1', 'group-1', 'payout-sched-1');
+
+      const sent = firstArg<{
+        userId: string;
+        template: string;
+        variables: Record<string, string>;
+        dedupeKey: string;
+      }>(notifications.notify);
+      expect(sent.userId).toBe('user-1');
+      expect(sent.template).toBe('ajo-payout-sent');
+      expect(sent.variables.amount).toBe('₦15,000.00');
+      expect(sent.variables.groupName).toBe('Lagos Traders');
+    });
+
+    it('derives the notification dedupe key from the payout', async () => {
+      await service.executePayout('user-1', 'group-1', 'payout-sched-1');
+
+      const sent = firstArg<{ dedupeKey: string }>(notifications.notify);
+      expect(sent.dedupeKey).toBe('ajo-payout-sent:payout-1');
+    });
+
+    it('does not notify again when execution is retried', async () => {
+      tx.payout.findUnique.mockResolvedValue({ id: 'payout-existing', status: 'SUCCEEDED' });
+      await service.executePayout('user-1', 'group-1', 'payout-sched-1');
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when the payout was refused', async () => {
+      // Announcing a payout that did not happen is worse than announcing
+      // nothing: it cannot be unsent.
+      tx.contributionSchedule.findMany.mockResolvedValue([{ status: 'OVERDUE' }]);
+      await expect(
+        service.executePayout('user-1', 'group-1', 'payout-sched-1'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('does not wait for the notification before answering', async () => {
+      // The money has already moved. Blocking the response on a push provider
+      // would make a slow or failing one look like a failed payout, and the
+      // caller would retry something that has already happened.
+      let release: () => void = () => {};
+      notifications.notify.mockReturnValue(
+        new Promise((resolve) => {
+          release = () => resolve({ inApp: true, pushed: 1 });
+        }),
+      );
+
+      await expect(
+        service.executePayout('user-1', 'group-1', 'payout-sched-1'),
+      ).resolves.toMatchObject({ id: 'payout-1' });
+
+      // The notification was started but had not settled when the payout
+      // returned.
+      expect(notifications.notify).toHaveBeenCalled();
+      release();
+    });
+
+    it('still pays out when notifying rejects', async () => {
+      notifications.notify.mockRejectedValue(new Error('push provider unreachable'));
+
+      await expect(
+        service.executePayout('user-1', 'group-1', 'payout-sched-1'),
+      ).resolves.toMatchObject({ id: 'payout-1' });
     });
 
     it('records who received the payout in the audit trail', async () => {

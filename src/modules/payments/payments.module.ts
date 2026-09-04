@@ -6,13 +6,14 @@ import type { Environment } from '../../config/env.schema.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PaymentsController } from './payments.controller.js';
 import { PaymentsService } from './payments.service.js';
 import { MockPaymentProvider } from './providers/mock-payment.provider.js';
 import { PAYMENT_PROVIDER } from './providers/payment-provider.js';
 
 @Module({
-  imports: [AuthModule, LedgerModule, AuditModule, FeesModule],
+  imports: [AuthModule, LedgerModule, AuditModule, FeesModule, NotificationsModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,

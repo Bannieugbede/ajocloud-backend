@@ -6,6 +6,7 @@ import type { PrismaService } from '../src/infrastructure/database/prisma.servic
 import type { TransactionService } from '../src/infrastructure/database/transaction.service.js';
 import { FeesService } from '../src/modules/fees/fees.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
+import type { TransactionalNotificationService } from '../src/modules/notifications/transactional-notification.service.js';
 import { PaymentSettlementService } from '../src/modules/payments/payment-settlement.service.js';
 
 const runDatabaseTests =
@@ -39,10 +40,17 @@ describeWithDatabase('deposit settlement (PostgreSQL integration)', () => {
   };
   const fees = new FeesService(prisma as unknown as PrismaService);
   const ledger = new LedgerService(transactions as unknown as TransactionService);
+  // Stubbed: these tests assert money movement, and a real provider would try
+  // to reach Expo from a test run. Delivery has its own tests.
+  const notifications = {
+    notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 0 }),
+  } as unknown as TransactionalNotificationService;
+
   const settlement = new PaymentSettlementService(
     prisma as unknown as PrismaService,
     transactions as unknown as TransactionService,
     ledger,
+    notifications,
   );
 
   let userId: string;

@@ -6,6 +6,8 @@ import {
   type TransactionClient,
 } from '../../infrastructure/database/transaction.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
+import { formatMoney } from '../notifications/domain/notification-money.js';
+import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 
 export type SettlementOutcome =
   | { readonly status: 'SETTLED'; readonly intentId: string }
@@ -32,6 +34,7 @@ export class PaymentSettlementService {
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
     private readonly ledger: LedgerService,
+    private readonly notifications: TransactionalNotificationService,
   ) {}
 
   /**
@@ -54,7 +57,7 @@ export class PaymentSettlementService {
       return { status: 'ALREADY_SETTLED', intentId: intent.id };
     }
 
-    return this.transactions.serializable(async (tx) => {
+    const settled = await this.transactions.serializable(async (tx) => {
       const current = await tx.paymentIntent.findUnique({
         where: { id: intent.id },
         select: {
@@ -133,8 +136,47 @@ export class PaymentSettlementService {
           payload: { intentId: current.id, creditedMinor: creditedMinor.toString() },
         },
       });
-      return { status: 'SETTLED', intentId: current.id } as const;
+      return {
+        status: 'SETTLED',
+        intentId: current.id,
+        notify: {
+          userId: current.userId,
+          creditedMinor,
+          currency: current.currency,
+        },
+      } as const;
     });
+
+    // Only the branch that actually posted carries a notification: every other
+    // outcome — unmatched, or already settled by a concurrent delivery —
+    // returns without one, so there is nothing here to announce.
+    if (settled.status === 'SETTLED' && 'notify' in settled) {
+      const { intentId } = settled;
+      const { userId, creditedMinor, currency } = settled.notify;
+      // After the transaction, never inside it: a "wallet funded" push sent
+      // from within would announce a credit that could still roll back, and it
+      // cannot be unsent. Not awaited, because a notification provider being
+      // down must not turn a settled deposit into a webhook the provider
+      // retries — that retry would be answered by the idempotency check, but
+      // the failure would be logged as though money had not moved.
+      void this.notifications
+        .notify({
+          userId,
+          template: 'wallet-funded',
+          // The credited amount, not the gross: this is what arrived in the
+          // wallet, and quoting the pre-fee figure would not match the balance.
+          variables: { amount: formatMoney(creditedMinor, currency) },
+          storedPayload: { intentId },
+          dedupeKey: `wallet-funded:${intentId}`,
+        })
+        .catch(() => {
+          // notify records its own failures; the money has moved either way.
+        });
+    }
+
+    return settled.status === 'SETTLED'
+      ? { status: 'SETTLED', intentId: settled.intentId }
+      : settled;
   }
 
   /** Records a provider failure. Nothing is posted, because no money moved. */
