@@ -28,6 +28,12 @@ import { seedIdentityAndCompliance } from './seeders/identity-compliance.js';
 import { seedFees } from './seeders/fees.js';
 import { seedNotifications } from './seeders/notifications.js';
 import { seedReferrals } from './seeders/referrals.js';
+import { seedDemoMembers } from './seeders/demo-members.js';
+import { seedAjoDemo } from './seeders/ajo-demo.js';
+import { seedAkawoDemo } from './seeders/akawo-demo.js';
+import { seedFoodDemo } from './seeders/food-demo.js';
+import { seedBillsDemo } from './seeders/bills-demo.js';
+import { seedReferralsDemo } from './seeders/referrals-demo.js';
 
 const PERMISSIONS = [
   'users.read',
@@ -455,6 +461,15 @@ export async function runSeed(): Promise<void> {
 
     await seedAdminDemo(prisma);
     await seedDashboardActivity(prisma);
+
+    // The product demo: the cast first, then everything that references it.
+    // Each screen in the app has data behind it once these have run.
+    const demoUsers = await seedDemoMembers(prisma);
+    await seedAjoDemo(prisma, demoUsers);
+    await seedAkawoDemo(prisma, demoUsers);
+    await seedFoodDemo(prisma, demoUsers);
+    await seedBillsDemo(prisma, demoUsers);
+
     // After the demo users exist, so every wallet gets an opening balance.
     await seedWalletFunding(prisma);
     // These run last: each reads the users, groups, and profiles the seeders
@@ -464,6 +479,9 @@ export async function runSeed(): Promise<void> {
     await seedFees(prisma);
     await seedNotifications(prisma);
     await seedReferrals(prisma);
+    // Last: posts reward transactions against wallets that must already have
+    // their ledger accounts.
+    await seedReferralsDemo(prisma, demoUsers);
   } finally {
     await prisma.$disconnect();
   }

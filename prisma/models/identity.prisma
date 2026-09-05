@@ -3,6 +3,9 @@ model User {
   email           String?    @unique @db.VarChar(320)
   phone           String?    @unique @db.VarChar(32)
   status          UserStatus @default(PENDING_VERIFICATION)
+  /// The code this user shares to refer others. Issued at registration and
+  /// never reissued: a code that changes would strand every link already sent.
+  referralCode    String?    @unique @db.VarChar(32)
   emailVerifiedAt DateTime?  @db.Timestamptz(6)
   phoneVerifiedAt DateTime?  @db.Timestamptz(6)
   lastLoginAt     DateTime?  @db.Timestamptz(6)

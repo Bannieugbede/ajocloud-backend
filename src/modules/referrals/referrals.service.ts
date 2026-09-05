@@ -63,14 +63,19 @@ export class ReferralsService {
    * from campaign rules, so the figure on screen matches the ledger.
    */
   async summaryFor(userId: string): Promise<ReferralSummary> {
-    const referrals = await this.prisma.referral.findMany({
-      where: { referrerUserId: userId },
-      select: {
-        status: true,
-        code: true,
-        rewards: { select: { status: true, amountMinor: true, currency: true } },
-      },
-    });
+    const [user, referrals] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { referralCode: true },
+      }),
+      this.prisma.referral.findMany({
+        where: { referrerUserId: userId },
+        select: {
+          status: true,
+          rewards: { select: { status: true, amountMinor: true, currency: true } },
+        },
+      }),
+    ]);
 
     const rewards = referrals.flatMap((referral) => referral.rewards);
     return {
@@ -84,7 +89,9 @@ export class ReferralsService {
           referral.status === ReferralStatus.QUALIFIED ||
           referral.status === ReferralStatus.REWARDED,
       ).length,
-      code: referrals[0]?.code ?? null,
+      // The code this member shares, not one they were referred by. Accounts
+      // created before codes were issued have none until they are backfilled.
+      code: user?.referralCode ?? null,
     };
   }
 

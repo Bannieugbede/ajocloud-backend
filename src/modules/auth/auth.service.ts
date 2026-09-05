@@ -16,6 +16,7 @@ import {
   AccountVerificationChannel,
   ConsentType,
   FinancialAccountPurpose,
+  ReferralStatus,
   SessionStatus,
   UserStatus,
 } from '../../../generated/prisma/enums.js';
@@ -24,6 +25,10 @@ import type { AccountVerificationChallenge } from '../../../generated/prisma/cli
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
+import {
+  generateReferralCode,
+  normaliseReferralCode,
+} from '../referrals/domain/referral-code.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
 import {
@@ -88,7 +93,10 @@ export class AuthService {
   async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
     const email = dto.email.trim().toLowerCase();
     const phone = dto.phone.trim();
-    const referralCode = dto.referralCode?.trim().toUpperCase();
+    // Normalised rather than upper-cased: someone pasting "ajo-acdefg" or
+    // typing the body alone has a valid code, and an unrecognisable one is
+    // treated as absent rather than failing a registration over it.
+    const referralCode = dto.referralCode ? normaliseReferralCode(dto.referralCode) : null;
     const challenge = this.newChallenge(email);
     const passwordHash = await hash(dto.password, {
       type: argon2id,
@@ -108,6 +116,8 @@ export class AuthService {
             email,
             phone,
             status: UserStatus.PENDING_VERIFICATION,
+            // Issued now so it exists the first time the member looks for it.
+            referralCode: generateReferralCode(),
             credential: { create: { passwordHash } },
             profile: { create: { firstName: dto.firstName.trim(), lastName: dto.lastName.trim() } },
             wallets: { create: { currency: 'NGN' } },
@@ -147,6 +157,32 @@ export class AuthService {
             },
           ],
         });
+        // Links the new account to whoever referred it, which is what the
+        // reward engine later reads. An unknown code registers the account
+        // anyway and simply earns nobody anything: refusing a signup because a
+        // friend mistyped their code would cost a real user for a trivial slip.
+        if (referralCode) {
+          const referrer = await tx.user.findUnique({
+            where: { referralCode },
+            select: { id: true },
+          });
+          // Self-referral is refused here as well as at award time. It cannot
+          // happen on this path — the code belongs to an existing account and
+          // this one is new — but the referral row is the record the engine
+          // trusts, and it should never be created describing something the
+          // rules forbid.
+          if (referrer && referrer.id !== created.id) {
+            await tx.referral.create({
+              data: {
+                referrerUserId: referrer.id,
+                referredUserId: created.id,
+                code: referralCode,
+                status: ReferralStatus.PENDING,
+              },
+            });
+          }
+        }
+
         await tx.auditLog.create({
           data: {
             actorUserId: created.id,
