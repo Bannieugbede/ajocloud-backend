@@ -15,6 +15,11 @@ describeWithDatabase('financial expansion (PostgreSQL integration)', () => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const ledger = new LedgerService({} as TransactionService);
 
+  // These talk to a real PostgreSQL, which may not be local. The default 5s
+  // budget is a network-latency test rather than a correctness one; every other
+  // integration spec here already allows for that.
+  jest.setTimeout(120_000);
+
   afterAll(async () => prisma.$disconnect());
 
   it('reserves wallet funds atomically and deduplicates the ledger command', async () => {
