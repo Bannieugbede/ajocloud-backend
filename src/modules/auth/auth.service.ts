@@ -25,10 +25,7 @@ import type { AccountVerificationChallenge } from '../../../generated/prisma/cli
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
-import {
-  generateReferralCode,
-  normaliseReferralCode,
-} from '../referrals/domain/referral-code.js';
+import { generateReferralCode, normaliseReferralCode } from '../referrals/domain/referral-code.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { RegisterDto } from './dto/register.dto.js';
 import {

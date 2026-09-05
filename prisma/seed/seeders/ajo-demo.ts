@@ -261,9 +261,8 @@ export async function seedAjoDemo(prisma: PrismaClient, users: DemoUsers): Promi
         const payoutSlotIndex = (sequence - 1) % allSlots.length;
         if (index !== payoutSlotIndex) continue;
 
-        const payoutSlot = plan.payoutReady && isCurrent
-          ? (slotsByMember.get('chisom')?.[0] ?? slotId)
-          : slotId;
+        const payoutSlot =
+          plan.payoutReady && isCurrent ? (slotsByMember.get('chisom')?.[0] ?? slotId) : slotId;
 
         await prisma.payoutSchedule.upsert({
           where: {

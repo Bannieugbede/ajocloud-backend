@@ -69,8 +69,18 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'EKEDC',
         name: 'EKEDC',
         products: [
-          { id: '40000000-0000-4000-8000-000000000521', code: 'EKEDC-PREPAID', name: 'Prepaid meter', minimumMinor: 1_000_00n },
-          { id: '40000000-0000-4000-8000-000000000522', code: 'EKEDC-POSTPAID', name: 'Postpaid account', minimumMinor: 1_000_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000521',
+            code: 'EKEDC-PREPAID',
+            name: 'Prepaid meter',
+            minimumMinor: 1_000_00n,
+          },
+          {
+            id: '40000000-0000-4000-8000-000000000522',
+            code: 'EKEDC-POSTPAID',
+            name: 'Postpaid account',
+            minimumMinor: 1_000_00n,
+          },
         ],
       },
       {
@@ -78,7 +88,12 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'IKEDC',
         name: 'IKEDC',
         products: [
-          { id: '40000000-0000-4000-8000-000000000523', code: 'IKEDC-PREPAID', name: 'Prepaid meter', minimumMinor: 1_000_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000523',
+            code: 'IKEDC-PREPAID',
+            name: 'Prepaid meter',
+            minimumMinor: 1_000_00n,
+          },
         ],
       },
     ],
@@ -93,7 +108,12 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'LWC',
         name: 'Lagos Water Corporation',
         products: [
-          { id: '40000000-0000-4000-8000-000000000524', code: 'LWC-STANDARD', name: 'Water bill', minimumMinor: 500_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000524',
+            code: 'LWC-STANDARD',
+            name: 'Water bill',
+            minimumMinor: 500_00n,
+          },
         ],
       },
     ],
@@ -108,8 +128,18 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'DSTV',
         name: 'DSTV',
         products: [
-          { id: '40000000-0000-4000-8000-000000000525', code: 'DSTV-COMPACT', name: 'Compact', fixedAmountMinor: 19_000_00n },
-          { id: '40000000-0000-4000-8000-000000000526', code: 'DSTV-COMPACT-PLUS', name: 'Compact Plus', fixedAmountMinor: 24_500_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000525',
+            code: 'DSTV-COMPACT',
+            name: 'Compact',
+            fixedAmountMinor: 19_000_00n,
+          },
+          {
+            id: '40000000-0000-4000-8000-000000000526',
+            code: 'DSTV-COMPACT-PLUS',
+            name: 'Compact Plus',
+            fixedAmountMinor: 24_500_00n,
+          },
         ],
       },
       {
@@ -117,7 +147,12 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'GOTV',
         name: 'GOtv',
         products: [
-          { id: '40000000-0000-4000-8000-000000000527', code: 'GOTV-MAX', name: 'Max', fixedAmountMinor: 8_500_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000527',
+            code: 'GOTV-MAX',
+            name: 'Max',
+            fixedAmountMinor: 8_500_00n,
+          },
         ],
       },
     ],
@@ -132,7 +167,12 @@ const CATEGORIES: readonly CategoryPlan[] = [
         code: 'SPECTRANET',
         name: 'Spectranet',
         products: [
-          { id: '40000000-0000-4000-8000-000000000528', code: 'SPECTRANET-UNLIMITED', name: 'Unlimited monthly', fixedAmountMinor: 18_000_00n },
+          {
+            id: '40000000-0000-4000-8000-000000000528',
+            code: 'SPECTRANET-UNLIMITED',
+            name: 'Unlimited monthly',
+            fixedAmountMinor: 18_000_00n,
+          },
         ],
       },
     ],
@@ -307,7 +347,9 @@ export async function seedBillsDemo(prisma: PrismaClient, users: DemoUsers): Pro
         reconciliationState: ReconciliationState.NOT_REQUIRED,
         ...(settled ? {} : { failureReason: 'Provider declined the request' }),
         createdAt,
-        ...(settled ? { completedAt: new Date(createdAt.getTime() + 45_000) } : { failedAt: createdAt }),
+        ...(settled
+          ? { completedAt: new Date(createdAt.getTime() + 45_000) }
+          : { failedAt: createdAt }),
       },
     });
   }

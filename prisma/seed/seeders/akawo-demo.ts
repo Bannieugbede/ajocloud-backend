@@ -220,7 +220,7 @@ export async function seedAkawoDemo(prisma: PrismaClient, users: DemoUsers): Pro
           // The reference is how an organiser recognises a member on their own
           // list, so it is shaped like the label asks for.
           reference: `${plan.referenceLabel.startsWith('Matric') ? 'MAT' : 'STL'}/${String(
-            2000 + Math.abs(hashKey(key)) % 900,
+            2000 + (Math.abs(hashKey(key)) % 900),
           )}`,
           status: AkawoPoolMemberStatus.ACTIVE,
           joinedAt: daysFromNow(plan.dueInDays - 20),
