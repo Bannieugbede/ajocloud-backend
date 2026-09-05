@@ -7,6 +7,7 @@ import {
 } from '../../infrastructure/database/transaction.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import { formatMoney } from '../notifications/domain/notification-money.js';
+import { ReferralsService } from '../referrals/referrals.service.js';
 import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 
 export type SettlementOutcome =
@@ -35,6 +36,7 @@ export class PaymentSettlementService {
     private readonly transactions: TransactionService,
     private readonly ledger: LedgerService,
     private readonly notifications: TransactionalNotificationService,
+    private readonly referrals: ReferralsService,
   ) {}
 
   /**
@@ -171,6 +173,26 @@ export class PaymentSettlementService {
         })
         .catch(() => {
           // notify records its own failures; the money has moved either way.
+        });
+
+      // A referral reward is considered only once the deposit has committed,
+      // so a reward is never issued against a credit that could still roll
+      // back. Not awaited, and its failures are swallowed by the service: the
+      // deposit has succeeded, and a reward that cannot be issued must not
+      // turn it into a webhook the provider retries. See ADR-012.
+      void this.referrals
+        .onDepositSettled({
+          userId,
+          amountMinor: creditedMinor,
+          currency,
+          paymentIntentId: intentId,
+          occurredAt: new Date(),
+        })
+        .catch(() => {
+          // The service records its own failures. Caught here as well because
+          // an unhandled rejection from a fire-and-forget call terminates the
+          // process in Node 24 — a settled deposit must not be able to take
+          // the API down on its way out.
         });
     }
 

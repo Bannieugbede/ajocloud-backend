@@ -23,6 +23,7 @@ function build(intent: Record<string, unknown> | null) {
     paymentIntent: { findUnique: jest.fn().mockResolvedValue(intent), update: intentUpdate },
   };
   const notifications = { notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 1 }) };
+  const referrals = { onDepositSettled: jest.fn().mockResolvedValue({ awarded: false }) };
   const service = new PaymentSettlementService(
     prisma as unknown as PrismaService,
     {
@@ -30,8 +31,9 @@ function build(intent: Record<string, unknown> | null) {
     } as unknown as TransactionService,
     { postWithin } as never,
     notifications as never,
+    referrals as never,
   );
-  return { service, prisma, tx, postWithin, intentUpdate, notifications };
+  return { service, prisma, tx, postWithin, intentUpdate, notifications, referrals };
 }
 
 const processing = (overrides: Record<string, unknown> = {}) => ({
@@ -176,6 +178,53 @@ describe('PaymentSettlementService', () => {
     // make a settled deposit look failed to the webhook caller.
     const { service, notifications } = build(processing());
     notifications.notify.mockRejectedValue(new Error('unreachable'));
+
+    await expect(service.settleSuccessful(REFERENCE)).resolves.toMatchObject({
+      status: 'SETTLED',
+    });
+  });
+
+  it('considers a settled deposit for a referral reward', async () => {
+    const { service, referrals } = build(processing());
+    await service.settleSuccessful(REFERENCE);
+    // The credited amount, matching what actually landed in the wallet: a
+    // campaign minimum must be judged against the same figure the member got.
+    expect(referrals.onDepositSettled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        currency: 'NGN',
+        paymentIntentId: 'intent-1',
+      }),
+    );
+  });
+
+  it('does not consider a referral when nothing matched the reference', async () => {
+    const { service, referrals } = build(null);
+    await service.settleSuccessful(REFERENCE);
+    expect(referrals.onDepositSettled).not.toHaveBeenCalled();
+  });
+
+  it('settles before the referral check finishes', async () => {
+    // Awaiting the reward would let a slow or failing referral path hold up a
+    // webhook response, and the provider would retry a deposit that had
+    // already settled. The response must not wait for it.
+    const { service, referrals } = build(processing());
+    let release = () => {};
+    referrals.onDepositSettled.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve({ awarded: false });
+      }),
+    );
+
+    await expect(service.settleSuccessful(REFERENCE)).resolves.toMatchObject({
+      status: 'SETTLED',
+    });
+    release();
+  });
+
+  it('still settles when the referral path rejects', async () => {
+    const { service, referrals } = build(processing());
+    referrals.onDepositSettled.mockRejectedValue(new Error('reward failed'));
 
     await expect(service.settleSuccessful(REFERENCE)).resolves.toMatchObject({
       status: 'SETTLED',

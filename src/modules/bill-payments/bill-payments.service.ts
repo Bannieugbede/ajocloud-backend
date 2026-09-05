@@ -692,6 +692,13 @@ export class BillPaymentsService {
       failureReason: true,
       createdAt: true,
       completedAt: true,
+      // Named so a past payment can be offered again without the caller having
+      // to fetch the whole biller catalogue to learn what "••2293" was paid to.
+      // Only the biller's public identity: no provider credentials or codes
+      // beyond the one the pay screen already accepts.
+      biller: {
+        select: { id: true, name: true, category: { select: { id: true, name: true } } },
+      },
       receipt: { select: { receiptNumber: true, issuedAt: true } },
     } as const;
   }

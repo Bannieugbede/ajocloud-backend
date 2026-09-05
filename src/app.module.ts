@@ -33,6 +33,8 @@ import { AdminModule } from './modules/admin/admin.module.js';
 import { EngagementModule } from './modules/engagement/engagement.module.js';
 import { KycModule } from './modules/kyc/kyc.module.js';
 import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
+import { ReferralsModule } from './modules/referrals/referrals.module.js';
+import { ReferralsApiModule } from './modules/referrals/referrals-api.module.js';
 
 @Module({
   imports: [
@@ -71,6 +73,8 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     EngagementModule,
     KycModule,
     WebhooksModule,
+    ReferralsModule,
+    ReferralsApiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

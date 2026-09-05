@@ -5,6 +5,7 @@ import { AccountType, FinancialAccountPurpose, UserStatus } from '../generated/p
 import type { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../src/infrastructure/database/transaction.service.js';
 import { FeesService } from '../src/modules/fees/fees.service.js';
+import { ReferralsService } from '../src/modules/referrals/referrals.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
 import type { TransactionalNotificationService } from '../src/modules/notifications/transactional-notification.service.js';
 import { PaymentSettlementService } from '../src/modules/payments/payment-settlement.service.js';
@@ -46,11 +47,21 @@ describeWithDatabase('deposit settlement (PostgreSQL integration)', () => {
     notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 0 }),
   } as unknown as TransactionalNotificationService;
 
+  // The real service: a deposit that settles must be considered for a referral
+  // reward exactly as it would be in production, so these tests cover the hook
+  // rather than stubbing past it.
+  const referrals = new ReferralsService(
+    prisma as unknown as PrismaService,
+    transactions as unknown as TransactionService,
+    ledger,
+  );
+
   const settlement = new PaymentSettlementService(
     prisma as unknown as PrismaService,
     transactions as unknown as TransactionService,
     ledger,
     notifications,
+    referrals,
   );
 
   let userId: string;
