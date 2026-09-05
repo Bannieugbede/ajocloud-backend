@@ -28,7 +28,7 @@ import { seedIdentityAndCompliance } from './seeders/identity-compliance.js';
 import { seedFees } from './seeders/fees.js';
 import { seedNotifications } from './seeders/notifications.js';
 import { seedReferrals } from './seeders/referrals.js';
-import { seedDemoMembers } from './seeders/demo-members.js';
+import { DEMO_PASSWORD, seedDemoMembers } from './seeders/demo-members.js';
 import { seedAjoDemo } from './seeders/ajo-demo.js';
 import { seedAkawoDemo } from './seeders/akawo-demo.js';
 import { seedFoodDemo } from './seeders/food-demo.js';
@@ -104,7 +104,7 @@ export async function runSeed(): Promise<void> {
       });
     }
 
-    const passwordHash = await hash('Development-Only-Password-123!', { type: argon2id });
+    const passwordHash = await hash(DEMO_PASSWORD, { type: argon2id });
     const admin = await prisma.user.upsert({
       where: { email: 'ada.admin@example.test' },
       update: {

@@ -1,5 +1,6 @@
 import { hash, argon2id } from 'argon2';
 import type { PrismaClient } from '../../../generated/prisma/client.js';
+import { DEMO_PASSWORD } from './demo-members.js';
 import {
   AccountType,
   AjoContributionMode,
@@ -177,7 +178,7 @@ const programmeSeed = [
 ] as const;
 
 export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
-  const passwordHash = await hash('Development-Only-Password-123!', { type: argon2id });
+  const passwordHash = await hash(DEMO_PASSWORD, { type: argon2id });
 
   // Registration grants MEMBER, so a seeded account without it cannot do what
   // an ordinary user can - creating a group, locking one, or asking for a slot

@@ -23,7 +23,16 @@ import {
  * a real identity, and the password is shared and obviously non-production.
  */
 
-export const DEMO_PASSWORD = 'Development-Only-Password-123!';
+/**
+ * The password every seeded account shares.
+ *
+ * Deliberately trivial, and safe only because seeding refuses to run unless
+ * NODE_ENV is non-production and ALLOW_SEED is set explicitly. It is shorter
+ * than the 12 characters registration demands: seeded users are created
+ * directly, and login imposes no minimum, so this signs in while remaining a
+ * password no real account could ever be given through the API.
+ */
+export const DEMO_PASSWORD = 'Password';
 
 export type DemoMember = {
   readonly key: string;

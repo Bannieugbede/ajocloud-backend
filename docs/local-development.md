@@ -27,7 +27,7 @@ application uses, so they genuinely work rather than only looking right:
 
 | Fixture             | Value                                     |
 | ------------------- | ----------------------------------------- |
-| Password (all)      | `Development-Only-Password-123!`          |
+| Password (all)      | `Password`                                |
 | Email verification  | `222222` for `email.pending@example.test` |
 | Transaction PIN     | `1357` for `ada.admin@example.test`       |
 | Ajo invitation code | `AJOTEST-INVITE-2026`                     |
