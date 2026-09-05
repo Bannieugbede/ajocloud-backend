@@ -141,7 +141,7 @@ export class AjoGroupsService {
   }
 
   async list(userId: string): Promise<unknown[]> {
-    return this.prisma.ajoGroup.findMany({
+    const groups = await this.prisma.ajoGroup.findMany({
       where: { members: { some: { userId, status: AjoMemberStatus.ACTIVE } }, deletedAt: null },
       select: {
         id: true,
@@ -156,8 +156,57 @@ export class AjoGroupsService {
         startDate: true,
         endDate: true,
         _count: { select: { slots: true, members: true } },
+        // Who runs the group, so the list can say so without a request per
+        // card. Only the admin membership is read; every other member's
+        // identity stays out of a list that does not need it.
+        members: {
+          where: { role: AjoMemberRole.GROUP_ADMIN, status: AjoMemberStatus.ACTIVE },
+          select: { userId: true },
+          take: 1,
+        },
+        // The round in progress, for "Round 3 of 12" and the next due date.
+        // Ordered by sequence so the newest cycle is the current one.
+        cycles: {
+          select: { sequence: true, contributionDueAt: true, status: true },
+          orderBy: { sequence: 'desc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    // Names are resolved separately for the same reason `get` does it:
+    // AjoGroupMember stores a userId without a User relation, and only the
+    // display name is ever exposed.
+    const adminUserIds = groups.flatMap((group) => group.members.map((member) => member.userId));
+    const profiles = adminUserIds.length
+      ? await this.prisma.userProfile.findMany({
+          where: { userId: { in: adminUserIds } },
+          select: { userId: true, firstName: true, lastName: true },
+        })
+      : [];
+    const nameByUserId = new Map(
+      profiles.map((profile) => [
+        profile.userId,
+        `${profile.firstName} ${profile.lastName}`.trim(),
+      ]),
+    );
+
+    return groups.map((group) => {
+      const { members, cycles, ...rest } = group;
+      const adminUserId = members[0]?.userId;
+      const cycle = cycles[0];
+      return {
+        ...rest,
+        adminName: adminUserId ? (nameByUserId.get(adminUserId) ?? 'Member') : null,
+        currentCycle: cycle
+          ? {
+              sequence: cycle.sequence,
+              contributionDueAt: cycle.contributionDueAt,
+              status: cycle.status,
+            }
+          : null,
+      };
     });
   }
 

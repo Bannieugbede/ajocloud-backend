@@ -116,17 +116,43 @@ export class AkawoPoolsService {
       where: { userId, status: AkawoPoolMemberStatus.ACTIVE },
       select: {
         ...memberSelect,
-        pool: { select: poolSelect },
+        // The organiser's id comes back so their name can be resolved below.
+        // Whom a member is paying is the thing that makes a collection
+        // trustworthy, so the list says it rather than leaving it to a tap.
+        pool: { select: { ...poolSelect, organiserUserId: true } },
         dues: { select: { id: true, amountMinor: true, status: true, paidAt: true } },
       },
       orderBy: { joinedAt: 'desc' },
     });
+
+    const organiserIds = [...new Set(memberships.map((entry) => entry.pool.organiserUserId))];
+    const profiles = organiserIds.length
+      ? await this.prisma.userProfile.findMany({
+          where: { userId: { in: organiserIds } },
+          select: { userId: true, firstName: true, lastName: true },
+        })
+      : [];
+    const nameByUserId = new Map(
+      profiles.map((profile) => [
+        profile.userId,
+        `${profile.firstName} ${profile.lastName}`.trim(),
+      ]),
+    );
+
     return this.serialize(
-      memberships.map((membership) => ({
-        membershipId: membership.id,
-        pool: membership.pool,
-        due: membership.dues[0] ?? null,
-      })),
+      memberships.map((membership) => {
+        // The organiser's user id is dropped: the name is what a member needs,
+        // and the id identifies an account they have no other claim on.
+        const { organiserUserId, ...pool } = membership.pool;
+        return {
+          membershipId: membership.id,
+          pool: {
+            ...pool,
+            organiserName: nameByUserId.get(organiserUserId) ?? 'Organiser',
+          },
+          due: membership.dues[0] ?? null,
+        };
+      }),
     );
   }
 
