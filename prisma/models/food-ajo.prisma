@@ -29,6 +29,11 @@ model FoodPackage {
   id            String    @id @default(uuid()) @db.Uuid
   groupId       String    @db.Uuid
   name          String    @db.VarChar(160)
+  /// A photograph of what the package contains. Optional: a package without
+  /// one is still sellable, and the app falls back to a coloured tile.
+  imageUrl      String?   @db.VarChar(500)
+  /// One line describing the package, shown under its name when browsing.
+  description   String?   @db.VarChar(500)
   priceMinor    BigInt
   priceLockedAt DateTime? @db.Timestamptz(6)
   currency      String    @default("NGN") @db.Char(3)

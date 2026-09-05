@@ -9,6 +9,8 @@ import {
   FoodAjoStatus,
   FoodCoordinatorApplicationStatus,
   FoodSubscriptionStatus,
+  KycStatus,
+  KycTier,
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
@@ -36,6 +38,8 @@ const programmeSelect = {
     select: {
       id: true,
       name: true,
+      imageUrl: true,
+      description: true,
       priceMinor: true,
       priceLockedAt: true,
       currency: true,
@@ -136,7 +140,7 @@ export class FoodAjoProgrammesService {
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
     const hasMore = programmes.length > query.limit;
-    const items = programmes.slice(0, query.limit);
+    const items = await this.withCoordinators(programmes.slice(0, query.limit));
     return this.serialize({
       items,
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
@@ -313,5 +317,51 @@ export class FoodAjoProgrammesService {
         typeof item === 'bigint' ? item.toString() : item,
       ),
     ) as T;
+  }
+
+  /**
+   * Names each programme's coordinator, and says whether they are verified.
+   *
+   * Whom a member is buying from is the thing that makes a bulk purchase
+   * trustworthy, so the browse list states it rather than leaving it to a tap.
+   * "Verified" is the coordinator's real KYC tier, not a decoration: a badge
+   * that did not mean anything would be worse than none at all.
+   */
+  private async withCoordinators<T extends { coordinatorUserId: string }>(
+    programmes: T[],
+  ): Promise<(T & { coordinatorName: string; coordinatorVerified: boolean })[]> {
+    const ids = [...new Set(programmes.map((programme) => programme.coordinatorUserId))];
+    if (ids.length === 0) return [];
+
+    const [profiles, kyc] = await Promise.all([
+      this.prisma.userProfile.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, firstName: true, lastName: true },
+      }),
+      this.prisma.kycProfile.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, tier: true, status: true },
+      }),
+    ]);
+
+    const nameByUserId = new Map(
+      profiles.map((profile) => [
+        profile.userId,
+        `${profile.firstName} ${profile.lastName}`.trim(),
+      ]),
+    );
+    const verifiedUserIds = new Set(
+      kyc
+        .filter(
+          (profile) => profile.status === KycStatus.VERIFIED && profile.tier !== KycTier.TIER_1,
+        )
+        .map((profile) => profile.userId),
+    );
+
+    return programmes.map((programme) => ({
+      ...programme,
+      coordinatorName: nameByUserId.get(programme.coordinatorUserId) ?? 'Coordinator',
+      coordinatorVerified: verifiedUserIds.has(programme.coordinatorUserId),
+    }));
   }
 }

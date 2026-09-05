@@ -25,6 +25,13 @@ function daysFromNow(days: number): Date {
 type PackagePlan = {
   readonly id: string;
   readonly name: string;
+  /**
+   * A photograph of the package. Unsplash's own CDN, pinned to a photo id and
+   * asked for a fixed width, so the app is not handed a multi-megabyte
+   * original over a Nigerian mobile connection.
+   */
+  readonly imageUrl: string;
+  readonly description: string;
   readonly priceMinor: bigint;
   readonly items: readonly { name: string; quantity: string; unit: string }[];
 };
@@ -59,6 +66,9 @@ const PROGRAMMES: readonly ProgrammePlan[] = [
       {
         id: '20000000-0000-4000-8000-000000000411',
         name: 'Basic staples',
+        imageUrl:
+          'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=70&auto=format&fit=crop',
+        description: 'Everyday staples for a family of four',
         priceMinor: 20_000_00n,
         items: [
           { name: 'Rice', quantity: '10', unit: 'kg' },
@@ -91,6 +101,9 @@ const PROGRAMMES: readonly ProgrammePlan[] = [
       {
         id: '20000000-0000-4000-8000-000000000421',
         name: 'Premium with protein',
+        imageUrl:
+          'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=70&auto=format&fit=crop',
+        description: 'Premium groceries with fresh protein items included',
         priceMinor: 35_000_00n,
         items: [
           { name: 'Rice', quantity: '12', unit: 'kg' },
@@ -104,6 +117,9 @@ const PROGRAMMES: readonly ProgrammePlan[] = [
       {
         id: '20000000-0000-4000-8000-000000000422',
         name: 'Premium half portion',
+        imageUrl:
+          'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=800&q=70&auto=format&fit=crop',
+        description: 'Half the premium package, for a smaller household',
         priceMinor: 18_000_00n,
         items: [
           { name: 'Rice', quantity: '6', unit: 'kg' },
@@ -134,6 +150,9 @@ const PROGRAMMES: readonly ProgrammePlan[] = [
       {
         id: '20000000-0000-4000-8000-000000000431',
         name: 'Fresh weekly basket',
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&q=70&auto=format&fit=crop',
+        description: 'Fresh vegetables and peppers from the weekly market',
         priceMinor: 8_000_00n,
         items: [
           { name: 'Tomatoes', quantity: '3', unit: 'kg' },
@@ -176,11 +195,15 @@ export async function seedFoodDemo(prisma: PrismaClient, users: DemoUsers): Prom
     for (const packagePlan of plan.packages) {
       await prisma.foodPackage.upsert({
         where: { id: packagePlan.id },
-        update: {},
+        // Updated as well as created, so re-seeding refreshes an image whose
+        // URL has changed rather than leaving the first one in place.
+        update: { imageUrl: packagePlan.imageUrl, description: packagePlan.description },
         create: {
           id: packagePlan.id,
           groupId: plan.id,
           name: packagePlan.name,
+          imageUrl: packagePlan.imageUrl,
+          description: packagePlan.description,
           priceMinor: packagePlan.priceMinor,
           currency: 'NGN',
           // Locked, because a package whose price can still move is not one a
