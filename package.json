@@ -40,7 +40,7 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
-    "check": "bun run prisma:validate && bun run prisma:generate && bun run format:check && bun run lint && bun run typecheck && bun run test:unit && bun run build"
+    "check": "bun run prisma:validate && bun run prisma:generate && bun run format:check && bun run lint && bun run typecheck && bun run test:unit && bun run test:e2e && bun run build"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
