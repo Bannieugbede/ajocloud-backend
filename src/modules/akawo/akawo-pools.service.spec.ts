@@ -166,3 +166,121 @@ describe('paid state', () => {
     expect(source).not.toMatch(/paidAt:\s*new Date\(\)/);
   });
 });
+
+describe('joined pools', () => {
+  /** A member's list, with one pool that has three members and two payments. */
+  function buildJoined() {
+    const pool = {
+      id: POOL_ID,
+      organiserUserId: ORGANISER,
+      name: 'Faculty Week Contribution',
+      amountMinor: 3_000_00n,
+      currency: 'NGN',
+      status: 'OPEN',
+      referenceLabel: 'Matric number',
+      dueAt: null,
+    };
+
+    const prisma = {
+      akawoPoolMember: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'membership-1',
+            pool,
+            dues: [{ id: 'due-1', amountMinor: 3_000_00n, status: 'PENDING', paidAt: null }],
+          },
+        ]),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      akawoPoolDue: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ amountMinor: 3_000_00n }, { amountMinor: 3_000_00n }]),
+      },
+      userProfile: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ userId: ORGANISER, firstName: 'Bode', lastName: 'Adewale' }]),
+      },
+    };
+
+    const service = new AkawoPoolsService(prisma as never, {} as never);
+    return { service, prisma };
+  }
+
+  it('tells a member how far the collection has got', async () => {
+    // Before paying, a member wants to know whether the group is actually
+    // paying up. Without these the list can only show what they owe.
+    const [entry] = (await buildJoined().service.listJoined('member-1')) as {
+      memberCount: number;
+      paidCount: number;
+      collectedMinor: string;
+      expectedMinor: string;
+      progressBps: number;
+    }[];
+
+    expect(entry).toMatchObject({
+      memberCount: 3,
+      paidCount: 2,
+      collectedMinor: '600000',
+      expectedMinor: '900000',
+    });
+    expect(entry?.progressBps).toBe(6666);
+  });
+
+  it('serializes the totals as strings, never as numbers', async () => {
+    // A collected total can exceed Number.MAX_SAFE_INTEGER, so it crosses the
+    // wire as a string like every other minor-unit amount.
+    const [entry] = (await buildJoined().service.listJoined('member-1')) as {
+      collectedMinor: unknown;
+      expectedMinor: unknown;
+    }[];
+    expect(typeof entry?.collectedMinor).toBe('string');
+    expect(typeof entry?.expectedMinor).toBe('string');
+  });
+
+  it('exposes no other member and no organiser account id', async () => {
+    // The totals are aggregates on purpose. A member may see how many have
+    // paid; who they are is the organiser's record, not theirs.
+    const [entry] = (await buildJoined().service.listJoined('member-1')) as {
+      pool: Record<string, unknown>;
+      members?: unknown;
+    }[];
+    expect(entry?.pool.organiserName).toBe('Bode Adewale');
+    expect(entry?.pool).not.toHaveProperty('organiserUserId');
+    // No roster: only the counts. The organiser's view is where names,
+    // references and individual payment states live.
+    expect(entry).not.toHaveProperty('members');
+    expect(JSON.stringify(entry)).not.toContain('reference"');
+  });
+
+  it('counts an empty pool as nothing collected rather than dividing by zero', async () => {
+    const prisma = {
+      akawoPoolMember: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'membership-1',
+            pool: {
+              id: POOL_ID,
+              organiserUserId: ORGANISER,
+              name: 'New pool',
+              amountMinor: 3_000_00n,
+              currency: 'NGN',
+              status: 'OPEN',
+              referenceLabel: 'Matric number',
+              dueAt: null,
+            },
+            dues: [],
+          },
+        ]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      akawoPoolDue: { findMany: jest.fn().mockResolvedValue([]) },
+      userProfile: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+
+    const service = new AkawoPoolsService(prisma as never, {} as never);
+    const [entry] = (await service.listJoined('member-1')) as { progressBps: number }[];
+    expect(entry?.progressBps).toBe(0);
+  });
+});

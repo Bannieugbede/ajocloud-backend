@@ -139,11 +139,32 @@ export class AkawoPoolsService {
       ]),
     );
 
+    // How far each collection has got. These are the same aggregates the
+    // member's own detail view already returns, and they carry nothing about
+    // any individual: a count of members, a count who have paid, and a sum.
+    // Whether the group is actually paying up is the thing a member wants to
+    // know before they pay themselves.
+    const totalsByPoolId = new Map(
+      await Promise.all(
+        memberships.map(
+          async (membership) =>
+            [membership.pool.id, await this.totals(membership.pool.id)] as const,
+        ),
+      ),
+    );
+
     return this.serialize(
       memberships.map((membership) => {
         // The organiser's user id is dropped: the name is what a member needs,
         // and the id identifies an account they have no other claim on.
         const { organiserUserId, ...pool } = membership.pool;
+        const totals = totalsByPoolId.get(pool.id) ?? {
+          memberCount: 0,
+          paidCount: 0,
+          collectedMinor: 0n,
+        };
+        const expectedMinor = pool.amountMinor * BigInt(totals.memberCount);
+
         return {
           membershipId: membership.id,
           pool: {
@@ -151,6 +172,9 @@ export class AkawoPoolsService {
             organiserName: nameByUserId.get(organiserUserId) ?? 'Organiser',
           },
           due: membership.dues[0] ?? null,
+          ...totals,
+          expectedMinor,
+          progressBps: collectionProgressBps(totals.collectedMinor, expectedMinor),
         };
       }),
     );

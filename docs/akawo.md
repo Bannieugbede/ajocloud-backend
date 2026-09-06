@@ -43,7 +43,9 @@ API — all routes require authentication:
   time the plaintext `joinCode` exists.
 - `GET /api/v1/akawo/pools/organised` — pools this user organises, with totals.
 - `GET /api/v1/akawo/pools/joined` — pools this user has joined, each with their
-  own due.
+  own due and the same pool totals the member's detail view returns
+  (`memberCount`, `paidCount`, `collectedMinor`, `expectedMinor`, `progressBps`).
+  Aggregates only: a member may see how many of the group have paid, never who.
 - `GET /api/v1/akawo/pools/preview?joinCode=` — name, amount and organiser for a
   code, so a joiner can confirm before committing. An unknown code and an
   unavailable pool report identically, so a guessed code reveals nothing.
