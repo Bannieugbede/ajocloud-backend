@@ -49,6 +49,26 @@ function refreshPath(apiPrefix: string): string {
   return `/${apiPrefix}/v1${REFRESH_PATH_SUFFIX}`;
 }
 
+/**
+ * Whether a caller wants the browser session cookies.
+ *
+ * The mobile app signs in through the same endpoints the browser does and
+ * reads its tokens from the response body, but React Native's fetch keeps a
+ * platform cookie jar and stores anything Set-Cookie says without being asked.
+ * Sending the trio to it therefore did two unwanted things: it left a
+ * long-lived refresh token sitting in plaintext storage the app does not
+ * manage — tokens belong in SecureStore — and it made every later write arrive
+ * with both credentials, which is what CsrfGuard used to refuse.
+ *
+ * A browser fetch always sends an Origin on a cross-site POST, and same-origin
+ * requests from the console are not what this protects. Native clients send
+ * none, so the absence of Origin is the signal, and it cannot be used to
+ * *gain* cookies — only to decline them.
+ */
+export function wantsSessionCookies(request: FastifyRequest): boolean {
+  return typeof request.headers.origin === 'string' && request.headers.origin.length > 0;
+}
+
 /** Writes the session cookie trio. `csrfToken` must be a fresh random value. */
 export function setSessionCookies(
   reply: FastifyReply,

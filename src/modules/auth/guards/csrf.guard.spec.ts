@@ -70,6 +70,36 @@ describe('CsrfGuard', () => {
     expect(publicGuard.canActivate(context(request))).toBe(true);
   });
 
+  it('exempts a Bearer caller that also carries a stale session cookie', () => {
+    // The mobile app is exactly this request. It signs in through the same
+    // endpoints the browser uses, so the API sets the session cookie trio on
+    // that response, and React Native's fetch stores them in the platform
+    // cookie jar without being asked. Every later write therefore arrives with
+    // both credentials, and the app has no way to read a cookie back.
+    //
+    // AccessTokenGuard authenticates such a request by its Bearer token, so
+    // this guard must judge the same credential: the cookie is not what is
+    // being trusted, and an unforgeable header does not need double-submit.
+    const request = {
+      method: 'POST',
+      headers: { authorization: 'Bearer x' },
+      cookies: { [ACCESS_COOKIE]: 'jwt', [CSRF_COOKIE]: 'token-value' },
+    };
+    expect(guard.canActivate(context(request))).toBe(true);
+  });
+
+  it('still demands the token when the Bearer scheme is malformed', () => {
+    // Only a well-formed Bearer credential earns the exemption. Anything else
+    // would let a forged page opt out of the check by sending a junk
+    // Authorization header, which a cross-origin request is free to do.
+    const request = {
+      method: 'POST',
+      headers: { authorization: 'Basic x' },
+      cookies: { [ACCESS_COOKIE]: 'jwt', [CSRF_COOKIE]: 'token-value' },
+    };
+    expect(() => guard.canActivate(context(request))).toThrow(ForbiddenException);
+  });
+
   it('rejects a mismatched token', () => {
     const request = {
       method: 'POST',

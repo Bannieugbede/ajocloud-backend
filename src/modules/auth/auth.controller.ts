@@ -26,6 +26,7 @@ import {
   clearSessionCookies,
   readCookie,
   setSessionCookies,
+  wantsSessionCookies,
 } from './session-cookie.js';
 import { GoogleOAuthService, type OAuthClient } from './google-oauth.service.js';
 import { PasswordResetService } from './password-reset.service.js';
@@ -74,10 +75,29 @@ export class AuthController {
    * Issues the session cookies for a freshly minted token pair and returns the
    * body for the caller. Bearer clients still receive the tokens in the body;
    * browsers simply ignore them and rely on the cookies.
+   *
+   * Cookies are only set for a caller that asked for them. React Native stores
+   * Set-Cookie in a platform jar the app does not manage, so sending them to
+   * mobile put a refresh token in plaintext storage and left every later write
+   * carrying two credentials at once. The tokens in the body are unaffected,
+   * which is the only thing mobile reads.
    */
-  private issueSession(reply: FastifyReply, tokens: TokenPair): TokenPair {
-    setSessionCookies(reply, tokens, randomBytes(32).toString('hex'), this.cookieEnv);
+  private issueSession(reply: FastifyReply, tokens: TokenPair, request: FastifyRequest): TokenPair {
+    if (wantsSessionCookies(request)) {
+      setSessionCookies(reply, tokens, randomBytes(32).toString('hex'), this.cookieEnv);
+    }
     return tokens;
+  }
+
+  /**
+   * Issues cookies unconditionally, for the one caller that cannot be sniffed.
+   *
+   * The Google callback is a top-level browser navigation, which carries no
+   * Origin header — the usual signal is absent precisely where the client is
+   * certainly a browser. Its mobile branch has already returned by this point.
+   */
+  private issueBrowserSession(reply: FastifyReply, tokens: TokenPair): void {
+    setSessionCookies(reply, tokens, randomBytes(32).toString('hex'), this.cookieEnv);
   }
 
   @Post('otp/request')
@@ -107,7 +127,7 @@ export class AuthController {
       dto.code,
       this.context(request),
     );
-    return this.issueSession(reply, tokens);
+    return this.issueSession(reply, tokens, request);
   }
 
   @Post('register')
@@ -124,7 +144,7 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    return this.issueSession(reply, await this.auth.login(dto, this.context(request)));
+    return this.issueSession(reply, await this.auth.login(dto, this.context(request)), request);
   }
 
   @Post('verify-email')
@@ -136,7 +156,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const tokens = await this.auth.verifyEmail(dto.userId, dto.code, this.context(request));
-    return this.issueSession(reply, tokens);
+    return this.issueSession(reply, tokens, request);
   }
 
   @Post('resend-verification')
@@ -158,7 +178,7 @@ export class AuthController {
     // clients still post it in the body.
     const refreshToken = readCookie(request, REFRESH_COOKIE) ?? dto.refreshToken;
     if (!refreshToken) throw new UnauthorizedException('Authentication required');
-    return this.issueSession(reply, await this.auth.refresh(refreshToken));
+    return this.issueSession(reply, await this.auth.refresh(refreshToken), request);
   }
 
   /**
@@ -208,7 +228,7 @@ export class AuthController {
       return;
     }
 
-    this.issueSession(reply, tokens);
+    this.issueBrowserSession(reply, tokens);
     void reply.redirect(this.google.successUrl('web'), HttpStatus.FOUND);
   }
 
@@ -265,6 +285,7 @@ export class AuthController {
     return this.issueSession(
       reply,
       await this.auth.createSessionForUser(userId, this.context(request)),
+      request,
     );
   }
 
