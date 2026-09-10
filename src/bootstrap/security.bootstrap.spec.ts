@@ -1,4 +1,4 @@
-import { createOriginPredicate } from './security.bootstrap.js';
+import { createCorsOptions, createOriginPredicate } from './security.bootstrap.js';
 import type { Environment } from '../config/env.schema.js';
 
 const env = (overrides: Partial<Environment>): Environment =>
@@ -48,5 +48,35 @@ describe('CORS origin predicate', () => {
     expect(isAllowed('http://localhost.evil.com')).toBe(false);
     expect(isAllowed('http://notlocalhost')).toBe(false);
     expect(isAllowed('http://127.0.0.1.evil.com')).toBe(false);
+  });
+});
+
+describe('CORS options', () => {
+  const runOriginCallback = (origin: string | undefined, environment: Environment) =>
+    new Promise<{ error: Error | null; allowed: unknown }>((resolve) => {
+      const originOption = createCorsOptions(environment).origin;
+      if (typeof originOption !== 'function') throw new Error('Expected CORS origin callback');
+      originOption(origin, (error, allowed) => resolve({ error, allowed }));
+    });
+
+  it('allows the production marketing waitlist origin when configured', async () => {
+    const result = await runOriginCallback(
+      'https://www.ajocloud.com',
+      env({
+        NODE_ENV: 'production',
+        CORS_ORIGINS: 'https://ajocloud.com,https://www.ajocloud.com',
+      }),
+    );
+
+    expect(result).toEqual({ error: null, allowed: true });
+  });
+
+  it('denies unconfigured origins without turning preflight into a server error', async () => {
+    const result = await runOriginCallback(
+      'https://www.ajocloud.com',
+      env({ NODE_ENV: 'production', CORS_ORIGINS: 'https://ajocloud.com' }),
+    );
+
+    expect(result).toEqual({ error: null, allowed: false });
   });
 });

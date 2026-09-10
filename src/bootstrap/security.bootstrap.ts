@@ -2,6 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import type { FastifyCorsOptions } from '@fastify/cors';
 import type { Environment } from '../config/env.schema.js';
 import { CSRF_HEADER } from '../modules/auth/session-cookie.js';
 
@@ -21,6 +22,22 @@ export function createOriginPredicate(env: Environment): (origin: string) => boo
   return (origin) => origins.includes(origin) || (allowLoopback && LOOPBACK_ORIGIN.test(origin));
 }
 
+export function createCorsOptions(env: Environment): FastifyCorsOptions {
+  const isAllowed = createOriginPredicate(env);
+  return {
+    origin: (origin, callback) => {
+      // A missing Origin header means a same-origin or non-browser client.
+      if (!origin || isAllowed(origin)) callback(null, true);
+      else callback(null, false);
+    },
+    // Browser sessions ride on cookies, so responses must permit credentials.
+    // @fastify/cors echoes the specific origin (never '*') for these requests.
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'Idempotency-Key', CSRF_HEADER],
+  };
+}
+
 export async function configureSecurity(
   app: NestFastifyApplication,
   env: Environment,
@@ -29,17 +46,5 @@ export async function configureSecurity(
   await app.register(cookie, {
     ...(env.COOKIE_SECRET ? { secret: env.COOKIE_SECRET } : {}),
   });
-  const isAllowed = createOriginPredicate(env);
-  await app.register(cors, {
-    origin: (origin, callback) => {
-      // A missing Origin header means a same-origin or non-browser client.
-      if (!origin || isAllowed(origin)) callback(null, true);
-      else callback(new Error('Origin is not allowed'), false);
-    },
-    // Browser sessions ride on cookies, so responses must permit credentials.
-    // @fastify/cors echoes the specific origin (never '*') for these requests.
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'Idempotency-Key', CSRF_HEADER],
-  });
+  await app.register(cors, createCorsOptions(env));
 }
