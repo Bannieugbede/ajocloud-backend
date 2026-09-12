@@ -149,6 +149,13 @@ const programmeSeed = [
       id: '20000000-0000-4000-8000-000000000012',
       name: 'Family Essentials Basket',
       priceMinor: 60_000_00n,
+      // These two programmes exist for the admin console, but the mobile list
+      // shows every OPEN and ACTIVE programme, so they appear beside the Food
+      // tab's own fixtures. Without an image they were the only cards with a
+      // blank tile where a photograph belongs.
+      imageUrl:
+        'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=800&q=70&auto=format&fit=crop',
+      description: 'Rice, beans and palm oil for a household of four',
     },
     items: [
       { name: 'Rice', quantity: '20.000', unit: 'kg' },
@@ -168,6 +175,9 @@ const programmeSeed = [
       id: '20000000-0000-4000-8000-000000000014',
       name: 'Monthly Provisions Box',
       priceMinor: 105_000_00n,
+      imageUrl:
+        'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&q=70&auto=format&fit=crop',
+      description: 'A month of store-cupboard provisions, delivered to the estate',
     },
     items: [
       { name: 'Tomato Paste', quantity: '12.000', unit: 'can' },
@@ -333,12 +343,19 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
     });
     await prisma.foodPackage.upsert({
       where: { id: programme.package.id },
-      update: { name: programme.package.name, priceMinor: programme.package.priceMinor },
+      update: {
+        name: programme.package.name,
+        priceMinor: programme.package.priceMinor,
+        imageUrl: programme.package.imageUrl,
+        description: programme.package.description,
+      },
       create: {
         id: programme.package.id,
         groupId: programme.id,
         name: programme.package.name,
         priceMinor: programme.package.priceMinor,
+        imageUrl: programme.package.imageUrl,
+        description: programme.package.description,
       },
     });
     for (const item of programme.items) {

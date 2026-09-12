@@ -411,13 +411,20 @@ export async function runSeed(): Promise<void> {
         endsAt: new Date('2026-12-01'),
       },
     });
+    // DRAFT, so this one is not listed to members today — but it is one status
+    // change away from being, and a package without a photograph is the only
+    // kind the Food tab cannot draw properly.
+    const staplesImageUrl =
+      'https://images.unsplash.com/photo-1574484284002-952d92456975?w=800&q=70&auto=format&fit=crop';
     await prisma.foodPackage.upsert({
       where: { id: '20000000-0000-4000-8000-000000000002' },
-      update: { name: 'Rice and Beans Essentials' },
+      update: { name: 'Rice and Beans Essentials', imageUrl: staplesImageUrl },
       create: {
         id: '20000000-0000-4000-8000-000000000002',
         groupId: foodGroup.id,
         name: 'Rice and Beans Essentials',
+        imageUrl: staplesImageUrl,
+        description: 'Monthly rice and beans for a small household',
         priceMinor: 50_000_00n,
       },
     });
