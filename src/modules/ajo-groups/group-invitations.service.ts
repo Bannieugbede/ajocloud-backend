@@ -70,7 +70,13 @@ export class GroupInvitationsService {
     config: ConfigService<Environment, true>,
   ) {
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
-    this.webUrl = config.get('ADMIN_WEB_URL', { infer: true }).replace(/\/+$/, '');
+    // The join page lives at the site root, not under /admin, and the mobile
+    // app claims only /join/* as a universal/app link. Production has had this
+    // set to the console path, which turned every shared link into a 404.
+    this.webUrl = config
+      .get('ADMIN_WEB_URL', { infer: true })
+      .replace(/\/+$/, '')
+      .replace(/\/admin$/, '');
   }
 
   /**

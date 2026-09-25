@@ -82,6 +82,24 @@ describe('GroupInvitationsService', () => {
       expect(issued.url).toBe(`https://ajo.example.com/join/${issued.code}`);
     });
 
+    // ADMIN_WEB_URL has been set to the console path in production. The link
+    // must still land on /join at the site root, which is the only path the
+    // web app serves and the mobile app claims.
+    it.each(['https://ajocloud.com/admin', 'https://ajocloud.com/admin/', 'https://ajocloud.com/'])(
+      'builds a root /join link when ADMIN_WEB_URL is %s',
+      async (adminWebUrl) => {
+        const scoped = new GroupInvitationsService(
+          prisma as unknown as PrismaService,
+          transactions as unknown as TransactionService,
+          {
+            get: (key: string) => (key === 'TOKEN_PEPPER' ? PEPPER : adminWebUrl),
+          } as unknown as ConfigService<Environment, true>,
+        );
+        const issued = await scoped.create('user-1', 'group-1', { maxUses: 1 });
+        expect(issued.url).toBe(`https://ajocloud.com/join/${issued.code}`);
+      },
+    );
+
     it('refuses a caller who is not an active member', async () => {
       tx.ajoGroupMember.findUnique.mockResolvedValue({ id: 'member-1', status: 'EXITED' });
       await expect(service.create('user-1', 'group-1', { maxUses: 1 })).rejects.toBeInstanceOf(

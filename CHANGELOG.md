@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Ajo invitation links point at the site root again.** They were built by
+  appending `/join/<code>` to `ADMIN_WEB_URL`, which production has had set to
+  the console path, so links came out as `/admin/join/<code>`. That is a 404 on
+  the website, and neither the mobile app nor its universal-link claim
+  recognises it. A trailing `/admin` is now stripped, as the staff invitation
+  link already does.
+
 ### Added
 
 - **Notifications now actually arrive.** The delivery path, preferences,
