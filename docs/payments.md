@@ -5,7 +5,8 @@ Food subscriptions and wallet top-ups all create a **payment intent**, confirm i
 with a method and the transaction PIN, and settle through the same ledger path.
 
 The design and its trade-offs are in
-[ADR-008](adr/ADR-008-shared-payment-intents.md).
+[ADR-008](adr/ADR-008-shared-payment-intents.md); how each product plugs into it
+is [ADR-013](adr/ADR-013-payment-targets.md).
 
 ## Routes
 
@@ -19,57 +20,76 @@ strings.
 | `GET  /api/v1/payments/intents/:id`         | Read one intent; polled while `PROCESSING`.                |
 | `GET  /api/v1/wallets/me/balance`           | Available balance, to offer or grey out the wallet method. |
 
-## The amount is never supplied by the client
+## Who decides the amount
 
-`CreateIntentDto` has **no amount field**. The amount is read from the target row
-— the pool due, the schedule — by `resolveTarget`, and re-read inside the
-settlement transaction. If it changed in between, settlement is refused rather
-than posting a stale figure.
+`CreateIntentDto.amountMinor` is read on exactly one line of the service, and
+what happens to it is the target's `amountRule`:
 
-This is the load-bearing rule of the module. A client-supplied amount would let a
-member settle a ₦50,000 due for ₦1 and still have it marked `PAID`. A test asserts
-the service source never reads an amount from the DTO, because a behavioural test
-would not catch a field added later.
+| Rule      | Targets          | Meaning                                                      |
+| --------- | ---------------- | ------------------------------------------------------------ |
+| `fixed`   | Akawo due, Food  | Read from the row. A requested amount is refused with 422.   |
+| `partial` | Ajo contribution | Up to what is still owed; nothing requested means all of it. |
+| `chosen`  | Wallet top-up    | Named by the payer: there is no row to read one from.        |
+
+The amount is re-resolved inside the settlement transaction. If the target no
+longer agrees, settlement is refused rather than posting a stale figure.
+
+This is the load-bearing rule of the module. A client-supplied amount on a fixed
+target would let a member settle a ₦50,000 due for ₦1 and still have it marked
+`PAID`. A part payment is safe only where the target's status is derived from
+what has arrived, as an Ajo schedule's is. A source test asserts the single read
+and the refusal for fixed targets, because a behavioural test would not catch a
+second read added later.
 
 ## Targets
 
-`targetType` plus `targetId`, not a foreign key per product.
+`targetType` plus `targetId`, not a foreign key per product. Each type is a
+`PaymentTarget` (`src/modules/payments/targets/payment-target.ts`) registered in
+`PaymentsModule`; boot fails if any type lacks one.
 
-| Target              | Status                                                    |
-| ------------------- | --------------------------------------------------------- |
-| `AKAWO_POOL_DUE`    | Implemented. Settles the due and posts the ledger.        |
-| `AJO_CONTRIBUTION`  | Refused with 422 until the Ajo schedule is payable.       |
-| `FOOD_SUBSCRIPTION` | Refused with 422 until Food subscriptions exist.          |
-| `WALLET_TOPUP`      | Refused with 422: no funding contract defines the amount. |
+| Target              | `targetId`       | Methods        | Credited to                        | On settlement                         |
+| ------------------- | ---------------- | -------------- | ---------------------------------- | ------------------------------------- |
+| `AKAWO_POOL_DUE`    | the due          | WALLET         | provider payable                   | due → `PAID`                          |
+| `AJO_CONTRIBUTION`  | the schedule     | WALLET         | the group pool                     | contribution row; schedule rebalanced |
+| `FOOD_SUBSCRIPTION` | the subscription | WALLET         | the programme's escrow             | subscription → `ACTIVE`               |
+| `WALLET_TOPUP`      | none             | TRANSFER, CARD | the wallet, net of fee, by webhook | referral qualification (ADR-012)      |
 
-Unimplemented targets are refused explicitly rather than creating an intent that
-could never be paid.
+A target that is not the caller's reports as 404, never 403, so the endpoint
+cannot be used to learn that someone else's due exists or what it is for.
+
+A paid Food enrolment withdrawn while the programme is still `OPEN` is refunded
+from escrow to the wallet in the same transaction as the withdrawal. Once the
+programme is `ACTIVE`, buying has begun and withdrawal is refused.
 
 ## Methods
 
+Every intent returns `methods`, the methods its target accepts. The app offers
+exactly those, and `confirm` refuses any other with 422 **before** checking the
+PIN, so a refused method costs no attempt.
+
 `WALLET` settles inside the request: the balance check, the ledger posting and
-the target's transition happen in one serializable transaction, so there is no
+the target's `settle` happen in one serializable transaction, so there is no
 window where a due is paid with no money behind it.
 
-`TRANSFER` and `CARD` move to `PROCESSING` and stop there. Per
+`TRANSFER` and `CARD` move to `PROCESSING`. Per
 [ADR-006](adr/ADR-006-monnify-webhooks-and-sandbox-verification.md), only a
 signature-verified webhook may complete an external payment — never the client
-returning from a checkout page. **The webhook handler that completes them is not
-yet written**, so a transfer or card payment currently starts and then waits
-indefinitely. Wallet payments are complete today.
+returning from a checkout page. `PaymentSettlementService` then credits the
+payer's wallet (ADR-010).
+
+That is why products are paid from the wallet and only a top-up uses the
+external rails: an external payment for a due would arrive as a deposit and
+leave the due unpaid. A member who is short tops up first, then pays. ADR-013
+records the alternative considered.
 
 ## Fees
 
-`feeMinor` is always `0`, and is returned explicitly so an unimplemented fee
-cannot be mistaken for a free product. The banded model in
-[open-questions/platform-fee-model.md](open-questions/platform-fee-model.md) is
-undecided: its boundaries overlap at every threshold ("up to ₦10,000" then "from
-₦10,000"), and guessing one is a money bug that surfaces only in reconciliation.
-
-The column, the API field, and the fee-revenue ledger leg all exist and are
-exercised; only `feeFor` needs to change when the model is settled. While the fee
-is zero the fee leg is omitted from the posting entirely, so no meaningless
-zero-amount rows enter the ledger.
+Only a wallet top-up carries a fee: it is the one payment that brings money in
+from outside, and it is priced cost-plus
+([ADR-009](adr/ADR-009-platform-fee-model.md)). Every other target moves money
+already inside the ledger and returns `feeMinor: "0"` explicitly. When the fee is
+zero the fee leg is omitted from the posting entirely, so no zero-amount rows
+enter the ledger.
 
 ## Idempotency
 

@@ -19,7 +19,12 @@ import { TransactionService } from '../../infrastructure/database/transaction.se
 import type { CreateFoodProgrammeDto } from './dto/create-food-programme.dto.js';
 import type { FoodProgrammeQueryDto } from './dto/food-programme-query.dto.js';
 import type { SubscribeFoodProgrammeDto } from './dto/subscribe-food-programme.dto.js';
-import { assertCanSubscribe, canCancelSubscription } from './domain/food-ajo-policy.js';
+import {
+  assertCanSubscribe,
+  canCancelSubscription,
+  subscriptionTotalMinor,
+} from './domain/food-ajo-policy.js';
+import { FoodSubscriptionTarget } from './food-subscription.payment-target.js';
 
 const programmeSelect = {
   id: true,
@@ -57,6 +62,7 @@ export class FoodAjoProgrammesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
+    private readonly payments: FoodSubscriptionTarget,
   ) {}
 
   async create(userId: string, dto: CreateFoodProgrammeDto): Promise<unknown> {
@@ -315,20 +321,42 @@ export class FoodAjoProgrammesService {
     return this.serialize(created);
   }
 
-  /** Withdraws the caller's own subscription while it is still unfulfilled. */
+  /**
+   * Withdraws the caller's own subscription while it is still unfulfilled, and
+   * refunds what they paid for it to their wallet. A paid enrolment can be
+   * withdrawn only before buying begins; see `canRefundSubscription`.
+   */
   async cancelSubscription(userId: string, programmeId: string): Promise<unknown> {
     const cancelled = await this.transactions.serializable(async (tx) => {
       const subscription = await tx.foodSubscription.findFirst({
         where: { groupId: programmeId, userId },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          amountPaidMinor: true,
+          paidAt: true,
+          group: { select: { status: true } },
+          package: { select: { currency: true } },
+        },
       });
       if (!subscription) throw new NotFoundException('You are not enrolled in this programme');
       if (!canCancelSubscription(subscription.status)) {
         throw new ConflictException('This enrolment can no longer be withdrawn');
       }
+      await this.payments.refundWithin(tx, {
+        userId,
+        subscriptionId: subscription.id,
+        programmeId,
+        programmeStatus: subscription.group.status,
+        amountPaidMinor: subscription.amountPaidMinor,
+        paidAt: subscription.paidAt,
+        currency: subscription.package.currency,
+      });
       const updated = await tx.foodSubscription.update({
         where: { id: subscription.id },
-        data: { status: FoodSubscriptionStatus.CANCELLED },
+        // Zeroed with the refund, so enrolling again starts from nothing owed
+        // back and nothing already paid.
+        data: { status: FoodSubscriptionStatus.CANCELLED, amountPaidMinor: 0n, paidAt: null },
       });
       await tx.auditLog.create({
         data: {
@@ -354,13 +382,25 @@ export class FoodAjoProgrammesService {
         status: true,
         quantity: true,
         fulfilmentMethod: true,
+        amountPaidMinor: true,
+        paidAt: true,
         createdAt: true,
         group: { select: { name: true, status: true, distributionAt: true } },
         package: { select: { name: true, priceMinor: true, currency: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return this.serialize(subscriptions);
+    // What each enrolment costs in total, so the app can say what is still
+    // owed without multiplying money on the client.
+    return this.serialize(
+      subscriptions.map((subscription) => ({
+        ...subscription,
+        amountDueMinor: subscriptionTotalMinor(
+          subscription.package.priceMinor,
+          subscription.quantity,
+        ),
+      })),
+    );
   }
 
   private serialize<T>(value: T): T {

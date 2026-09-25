@@ -3,6 +3,7 @@ import { FoodAjoStatus, KycStatus, KycTier } from '../../../generated/prisma/enu
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { FoodAjoProgrammesService } from './food-ajo-programmes.service.js';
+import type { FoodSubscriptionTarget } from './food-subscription.payment-target.js';
 
 describe('the public Food programme preview', () => {
   const prisma = {
@@ -13,6 +14,7 @@ describe('the public Food programme preview', () => {
   const service = new FoodAjoProgrammesService(
     prisma as unknown as PrismaService,
     {} as TransactionService,
+    {} as FoodSubscriptionTarget,
   );
 
   const ID = '11111111-2222-4333-8444-555555555555';

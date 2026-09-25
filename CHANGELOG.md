@@ -4,6 +4,26 @@
 
 ### Added
 
+- **Every product pays through one contract.** Ajo contributions and Food
+  enrolments are now payment-intent targets alongside Akawo dues and wallet
+  top-ups, each implemented as a `PaymentTarget` in the module that owns it
+  (ADR-013). Ajo contributions may be paid in part, into the group's pool. Food
+  enrolments are paid in full into a per-programme escrow account, become
+  `ACTIVE` when paid, and are refunded to the wallet if withdrawn before buying
+  begins. Every intent now returns `methods`, and the procurement plan reports
+  `collectedMinor`. Migration `20260925150000_food_subscription_payments` adds
+  `amountPaidMinor` and `paidAt` to subscriptions and the `FOOD_PROGRAMME_ESCROW`
+  account purpose.
+
+### Fixed
+
+- **A due paid by card or transfer is no longer left unpaid.** Product payments
+  are wallet-only, and `confirm` refuses another method before the PIN is
+  checked. External payments settle as wallet deposits, so a card payment for a
+  due used to credit the wallet and leave the due `PENDING`.
+- **A top-up can no longer be paid from the wallet it tops up**, which moved
+  money out of the wallet while describing money coming in.
+
 - **Short share links, and opt-in public listing.** Every Ajo group, Akawo pool
   and Food Ajo programme has a permanent 7-character `shortCode`, so the website
   can serve `ajocloud.com/g/`, `/p/` and `/f/<code>` instead of UUIDs. Ajo

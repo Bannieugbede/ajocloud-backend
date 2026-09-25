@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PermissionsModule } from '../permissions/permissions.module.js';
+import { AjoContributionTarget } from './ajo-contribution.payment-target.js';
 import { AjoGroupsController } from './ajo-groups.controller.js';
 import { AjoGroupsService } from './ajo-groups.service.js';
 import { AjoSettlementService } from './ajo-settlement.service.js';
@@ -16,6 +17,14 @@ import {
 @Module({
   imports: [AuthModule, PermissionsModule, LedgerModule, NotificationsModule],
   controllers: [AjoGroupsController, PublicAjoGroupsController, PublicInvitationsController],
-  providers: [AjoGroupsService, AjoSwapsService, GroupInvitationsService, AjoSettlementService],
+  providers: [
+    AjoGroupsService,
+    AjoSwapsService,
+    GroupInvitationsService,
+    AjoSettlementService,
+    AjoContributionTarget,
+  ],
+  // Exported for the shared payment contract, which settles contributions.
+  exports: [AjoContributionTarget],
 })
 export class AjoGroupsModule {}

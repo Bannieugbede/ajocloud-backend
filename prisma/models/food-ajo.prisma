@@ -72,6 +72,11 @@ model FoodSubscription {
   status           FoodSubscriptionStatus @default(PENDING)
   quantity         Int                    @default(1)
   fulfilmentMethod FoodFulfilmentMethod   @default(PICKUP)
+  /// What the member has paid towards price × quantity. The subscription
+  /// becomes ACTIVE only when this reaches the full amount; see
+  /// docs/payments.md. Reset to zero by a refund.
+  amountPaidMinor  BigInt                 @default(0)
+  paidAt           DateTime?              @db.Timestamptz(6)
   createdAt        DateTime               @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime               @updatedAt @db.Timestamptz(6)
 

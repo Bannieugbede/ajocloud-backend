@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { PaymentTargetType } from '../../../generated/prisma/enums.js';
+import { AjoContributionTarget } from '../ajo-groups/ajo-contribution.payment-target.js';
+import { FoodSubscriptionTarget } from '../food-ajo/food-subscription.payment-target.js';
 import { PaymentsService } from './payments.service.js';
+import { AkawoPoolDueTarget } from './targets/akawo-pool-due.target.js';
+import { paymentTargetRegistry } from './targets/payment-target.js';
+import { WalletTopUpTarget } from './targets/wallet-topup.target.js';
 
 type WriteArgs = { where?: unknown; data: Record<string, unknown> };
 type WriteResult = Record<string, unknown>;
@@ -47,6 +53,7 @@ type Seed = {
   intentStatus?: string;
   intentMissing?: boolean;
   intentAmountMinor?: bigint;
+  intentTargetType?: string;
   expiresAt?: Date;
   availableMinor?: bigint;
   feeMinor?: bigint;
@@ -74,8 +81,8 @@ function build(seed: Seed = {}) {
         userId: USER,
         walletId: seed.walletId === undefined ? 'wallet-1' : seed.walletId,
         status: seed.intentStatus ?? 'REQUIRES_CONFIRMATION',
-        targetType: 'AKAWO_POOL_DUE',
-        targetId: DUE,
+        targetType: seed.intentTargetType ?? 'AKAWO_POOL_DUE',
+        targetId: seed.intentTargetType === 'WALLET_TOPUP' ? null : DUE,
         amountMinor: seed.intentAmountMinor ?? 5_000_00n,
         feeMinor: seed.feeMinor ?? 0n,
         totalMinor: (seed.intentAmountMinor ?? 5_000_00n) + (seed.feeMinor ?? 0n),
@@ -156,6 +163,14 @@ function build(seed: Seed = {}) {
         .fn()
         .mockResolvedValue({ providerReference: 'mock-ref', checkoutUrl: 'https://x.invalid' }),
     } as never,
+    // The real targets: the Akawo due is what these tests pay, and the others
+    // only need constructing.
+    paymentTargetRegistry(Object.values(PaymentTargetType), [
+      new AkawoPoolDueTarget(),
+      new AjoContributionTarget({} as never),
+      new FoodSubscriptionTarget({} as never),
+      new WalletTopUpTarget(),
+    ]),
   );
 
   return { service, calls, prisma, tx };
@@ -224,15 +239,43 @@ describe('create', () => {
     expect(result.amountMinor).toBe('12345678901234567890');
   });
 
-  it.each(['AJO_CONTRIBUTION', 'FOOD_SUBSCRIPTION', 'WALLET_TOPUP'])(
-    'refuses %s explicitly rather than creating an unpayable intent',
-    async (targetType) => {
-      const { service } = build();
-      await expect(
-        service.create(USER, { targetType, targetId: DUE } as never, 'key-1'),
-      ).rejects.toBeInstanceOf(UnprocessableEntityException);
-    },
-  );
+  it('refuses an amount for a target whose amount is read from its row', async () => {
+    const { service, calls } = build();
+    // Refused rather than ignored, so a client that sends one learns it is
+    // wrong instead of believing it underpaid successfully.
+    await expect(
+      service.create(
+        USER,
+        { targetType: 'AKAWO_POOL_DUE', targetId: DUE, amountMinor: '100' } as never,
+        'key-1',
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(calls.intentCreate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a top-up that does not say how much to add', async () => {
+    const { service } = build();
+    await expect(
+      service.create(USER, { targetType: 'WALLET_TOPUP' } as never, 'key-1'),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it('tells the client which methods the payment accepts', async () => {
+    const { service } = build();
+    const due = await service.create(
+      USER,
+      { targetType: 'AKAWO_POOL_DUE', targetId: DUE } as never,
+      'key-1',
+    );
+    const topUp = await service.create(
+      USER,
+      { targetType: 'WALLET_TOPUP', amountMinor: '1000000' } as never,
+      'key-2',
+    );
+    // A due is paid from the wallet; a top-up can only come from outside it.
+    expect(due.methods).toEqual(['WALLET']);
+    expect(topUp.methods).toEqual(['TRANSFER', 'CARD']);
+  });
 });
 
 describe('confirm by wallet', () => {
@@ -371,11 +414,36 @@ describe('confirm by wallet', () => {
   });
 });
 
-describe('confirm by an external rail', () => {
+describe('confirm with a method the target does not accept', () => {
+  it.each(['TRANSFER', 'CARD'])(
+    'refuses %s for a due before asking for the PIN',
+    async (method) => {
+      const { service, calls } = build();
+      await expect(
+        service.confirm(USER, INTENT, { method, transactionPin: '1234' } as never, 'key-2'),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      // An external payment for a due would settle as a wallet deposit and
+      // leave the due unpaid (ADR-010), so it is refused outright. Checked
+      // before the PIN, so the refusal costs no attempt.
+      expect(calls.verifyPin).not.toHaveBeenCalled();
+      expect(calls.dueUpdate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses to pay a top-up from the wallet it would fund', async () => {
+    const { service, calls } = build({ intentTargetType: 'WALLET_TOPUP' });
+    await expect(service.confirm(USER, INTENT, confirmWallet, 'key-2')).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+    expect(calls.postWithin).not.toHaveBeenCalled();
+  });
+});
+
+describe('confirm a top-up by an external rail', () => {
   it.each(['TRANSFER', 'CARD'])(
     'leaves a %s payment PROCESSING, never succeeded',
     async (method) => {
-      const { service, calls } = build();
+      const { service, calls } = build({ intentTargetType: 'WALLET_TOPUP' });
 
       const result = await service.confirm(
         USER,
@@ -387,12 +455,12 @@ describe('confirm by an external rail', () => {
       // ADR-006: only a signature-verified webhook may complete an external
       // payment. Returning SUCCEEDED here would credit on the client's word.
       expect(result.status).toBe('PROCESSING');
-      expect(calls.dueUpdate).not.toHaveBeenCalled();
+      expect(calls.postWithin).not.toHaveBeenCalled();
     },
   );
 
   it('returns transfer instructions the payer can act on', async () => {
-    const { service } = build();
+    const { service } = build({ intentTargetType: 'WALLET_TOPUP' });
     const result = await service.confirm(
       USER,
       INTENT,
@@ -413,14 +481,12 @@ describe('source guarantees', () => {
     expect(source).not.toMatch(/dto\.(feeMinor|totalMinor)/);
   });
 
-  it('accepts a client amount only for a wallet top-up', () => {
-    // A top-up is the sole target with no row to read an amount from. Every
-    // other target must read its own, so a payer cannot settle a large due for
-    // one naira.
-    // One line, so there is a single controlled entry point for a client
-    // amount rather than several places to keep in step.
+  it('accepts a client amount at one controlled point, refused for fixed targets', () => {
+    // A fixed target must read its own amount, so a payer cannot settle a large
+    // due for one naira. One line, so there is a single entry point for a
+    // client amount rather than several places to keep in step.
     const amountLines = source.split('\n').filter((line) => line.includes('dto.amountMinor'));
     expect(amountLines).toHaveLength(1);
-    expect(source).toMatch(/WALLET_TOPUP[\s\S]*?requestedAmountMinor/);
+    expect(source).toMatch(/requestedAmountMinor !== null && handler\.amountRule === 'fixed'/);
   });
 });

@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
+  acceptsPayment,
   acceptsSubscriptions,
   assertCanCompleteProgramme,
   assertCanConfirmCollection,
@@ -14,10 +15,13 @@ import {
   assertPackageEditable,
   assertVendorUsable,
   canTransitionDistribution,
+  canRefundSubscription,
   canTransitionProgramme,
   canTransitionPurchaseOrder,
+  escrowAccountCode,
   generateCollectionCode,
   isValidCollectionCodeShape,
+  subscriptionTotalMinor,
   normalizeCollectionCode,
   purchaseOrderTotalMinor,
   scaleByQuantity,
@@ -392,5 +396,35 @@ describe('collection codes', () => {
   it('rejects a code of the wrong shape', () => {
     expect(isValidCollectionCodeShape('ABC')).toBe(false);
     expect(isValidCollectionCodeShape('ABCDE1')).toBe(false);
+  });
+});
+
+describe('paying for a subscription', () => {
+  it('costs the package price for each portion', () => {
+    expect(subscriptionTotalMinor(4_000_000n, 3)).toBe(12_000_000n);
+  });
+
+  it.each([
+    ['OPEN', true],
+    ['ACTIVE', true],
+    ['DRAFT', false],
+    ['SUSPENDED', false],
+    ['COMPLETED', false],
+    ['CANCELLED', false],
+  ])('a %s programme collects payment: %s', (status, expected) => {
+    expect(acceptsPayment(status)).toBe(expected);
+  });
+
+  it.each([
+    ['OPEN', true],
+    // Buying has begun: the money is committed to a vendor.
+    ['ACTIVE', false],
+  ])('a paid enrolment in a %s programme is refundable: %s', (status, expected) => {
+    expect(canRefundSubscription(status)).toBe(expected);
+  });
+
+  it('keeps each programme’s money in its own account', () => {
+    expect(escrowAccountCode('p-1')).toBe('FOOD_PROGRAMME:p-1:ESCROW');
+    expect(escrowAccountCode('p-1')).not.toBe(escrowAccountCode('p-2'));
   });
 });

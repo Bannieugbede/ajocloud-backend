@@ -318,3 +318,40 @@ export function isValidCollectionCodeShape(code: string): boolean {
     normalized.length === 6 && [...normalized].every((c) => COLLECTION_CODE_ALPHABET.includes(c))
   );
 }
+
+/** The ledger account code holding one programme's paid subscriptions. */
+export function escrowAccountCode(programmeId: string): string {
+  return `FOOD_PROGRAMME:${programmeId}:ESCROW`;
+}
+
+/**
+ * What a subscription costs: the package's locked price for each portion.
+ *
+ * Read from the package at payment time rather than stored on the
+ * subscription, which is safe because opening a programme locks its prices and
+ * only an open programme takes subscribers.
+ */
+export function subscriptionTotalMinor(priceMinor: bigint, quantity: number): bigint {
+  return priceMinor * BigInt(quantity);
+}
+
+/**
+ * A programme collects payment while it is open, and after buying has begun
+ * from members who enrolled before it did. It never collects once it has
+ * finished, been suspended or been cancelled: there would be nothing to spend
+ * the money on.
+ */
+export function acceptsPayment(programmeStatus: string): boolean {
+  return programmeStatus === 'OPEN' || programmeStatus === 'ACTIVE';
+}
+
+/**
+ * A paid subscription is refundable only before procurement begins.
+ *
+ * Once a programme is ACTIVE its money is being spent on the food ordered for
+ * the members enrolled at that moment, so withdrawing would take back money
+ * already committed to a vendor.
+ */
+export function canRefundSubscription(programmeStatus: string): boolean {
+  return programmeStatus === 'OPEN';
+}

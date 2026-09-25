@@ -3,6 +3,7 @@ import { ContributionFrequency, FoodFulfilmentMethod } from '../../../generated/
 import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { FoodAjoProgrammesService } from './food-ajo-programmes.service.js';
+import type { FoodSubscriptionTarget } from './food-subscription.payment-target.js';
 
 describe('FoodAjoProgrammesService', () => {
   const prisma = {
@@ -14,6 +15,7 @@ describe('FoodAjoProgrammesService', () => {
   const service = new FoodAjoProgrammesService(
     prisma as unknown as PrismaService,
     transactions as unknown as TransactionService,
+    {} as FoodSubscriptionTarget,
   );
   const input = {
     name: 'Family staples',

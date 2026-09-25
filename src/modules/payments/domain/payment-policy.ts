@@ -71,3 +71,28 @@ export function isPayableAmount(amountMinor: bigint): boolean {
 export function canPayFromWallet(availableMinor: bigint, totalMinor: bigint): boolean {
   return availableMinor >= totalMinor;
 }
+
+/** Why a requested amount cannot be paid. The message is shown to the payer. */
+export class PaymentAmountError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PaymentAmountError';
+  }
+}
+
+/**
+ * The amount to take for a target that allows part payment.
+ *
+ * Nothing requested means the whole of what is owed. Overpayment is refused
+ * rather than trimmed: a payer who sends more than they owe has misunderstood
+ * something, and quietly keeping the difference would be worse than saying so.
+ */
+export function partialAmount(outstandingMinor: bigint, requestedMinor: bigint | null): bigint {
+  if (outstandingMinor <= 0n) throw new PaymentAmountError('This has already been paid in full');
+  if (requestedMinor === null) return outstandingMinor;
+  if (requestedMinor <= 0n) throw new PaymentAmountError('Choose an amount greater than zero');
+  if (requestedMinor > outstandingMinor) {
+    throw new PaymentAmountError('That is more than is still owed');
+  }
+  return requestedMinor;
+}

@@ -236,7 +236,7 @@ export class FoodAjoCoordinatorService {
       this.prisma.foodSubscription.groupBy({
         by: ['packageId'],
         where: { groupId: programmeId, status: { in: [...LIVE_SUBSCRIPTIONS] } },
-        _sum: { quantity: true },
+        _sum: { quantity: true, amountPaidMinor: true },
         _count: { _all: true },
       }),
     ]);
@@ -264,6 +264,10 @@ export class FoodAjoCoordinatorService {
         // What the members owe for this package, which is the ceiling for what
         // may sensibly be spent procuring it.
         expectedMinor: foodPackage.priceMinor * BigInt(portions),
+        // What has actually arrived in the programme's escrow. Buying should be
+        // sized by this rather than by what is owed, since ADR-001 allows no
+        // float to cover a member who has not paid.
+        collectedMinor: enrolment?._sum.amountPaidMinor ?? 0n,
         // Aggregate shopping list: each item's quantity multiplied by portions.
         items: foodPackage.items.map((item) => ({
           name: item.name,
@@ -278,6 +282,7 @@ export class FoodAjoCoordinatorService {
       programme,
       totalPortions: lines.reduce((sum, line) => sum + line.portions, 0),
       expectedMinor: lines.reduce((sum, line) => sum + line.expectedMinor, 0n),
+      collectedMinor: lines.reduce((sum, line) => sum + line.collectedMinor, 0n),
       packages: lines,
     });
   }

@@ -147,7 +147,7 @@ export class AjoSettlementService {
       }
 
       const walletAccount = await this.memberWalletAccount(tx, userId, schedule.currency);
-      const poolAccount = await this.poolAccount(tx, groupId, schedule.currency);
+      const poolAccount = await this.poolAccountWithin(tx, groupId, schedule.currency);
 
       // Re-read inside the transaction rather than trusting a cached summary.
       // A member without the funds gets a refusal; an overdrawn wallet would be
@@ -172,53 +172,93 @@ export class AjoSettlementService {
         ],
       });
 
-      const now = new Date();
-      const contribution = await tx.contribution.create({
-        data: {
-          groupId,
-          scheduleId,
-          memberId: member.id,
-          slotId: schedule.slotId,
-          amountMinor,
-          currency: schedule.currency,
-          status: ContributionStatus.SUCCEEDED,
-          idempotencyKey,
-          ledgerTransactionId: posting.id,
-          processedAt: now,
-          paidAt: now,
-          allocatedAt: now,
-        },
-      });
-
-      // Derived from the amounts rather than assumed, so a schedule cannot claim
-      // to be paid while it is short.
-      const amountPaidMinor = schedule.amountPaidMinor + amountMinor;
-      await tx.contributionSchedule.update({
-        where: { id: scheduleId },
-        data: {
-          amountPaidMinor,
-          status: contributionScheduleStatusFor({
-            amountDueMinor: schedule.amountDueMinor,
-            amountPaidMinor,
-            dueAt: schedule.dueAt,
-            now,
-          }),
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorUserId: userId,
-          action: 'ajo.contribution.paid',
-          subjectType: 'Contribution',
-          subjectId: contribution.id,
-          groupId,
-          metadata: { scheduleId, amountMinor: amountMinor.toString() },
-        },
+      const contribution = await this.recordContributionWithin(tx, {
+        userId,
+        memberId: member.id,
+        schedule,
+        amountMinor,
+        idempotencyKey,
+        ledgerTransactionId: posting.id,
       });
 
       return this.view(contribution);
     });
+  }
+
+  /**
+   * Records money that has already been posted to a group's pool against the
+   * contribution it pays: the contribution row, the schedule's new balance and
+   * status, and the audit entry.
+   *
+   * Shared by `payContribution` and the payment contract's Ajo target, so a
+   * contribution looks the same however it was paid. Must run in the same
+   * transaction as the posting it records.
+   */
+  async recordContributionWithin(
+    tx: TransactionClient,
+    input: {
+      readonly userId: string;
+      readonly memberId: string;
+      readonly schedule: {
+        readonly id: string;
+        readonly groupId: string;
+        readonly slotId: string;
+        readonly amountDueMinor: bigint;
+        readonly amountPaidMinor: bigint;
+        readonly currency: string;
+        readonly dueAt: Date;
+      };
+      readonly amountMinor: bigint;
+      readonly idempotencyKey: string;
+      readonly ledgerTransactionId: string;
+    },
+  ) {
+    const { schedule, amountMinor } = input;
+    const now = new Date();
+    const contribution = await tx.contribution.create({
+      data: {
+        groupId: schedule.groupId,
+        scheduleId: schedule.id,
+        memberId: input.memberId,
+        slotId: schedule.slotId,
+        amountMinor,
+        currency: schedule.currency,
+        status: ContributionStatus.SUCCEEDED,
+        idempotencyKey: input.idempotencyKey,
+        ledgerTransactionId: input.ledgerTransactionId,
+        processedAt: now,
+        paidAt: now,
+        allocatedAt: now,
+      },
+    });
+
+    // Derived from the amounts rather than assumed, so a schedule cannot claim
+    // to be paid while it is short.
+    const amountPaidMinor = schedule.amountPaidMinor + amountMinor;
+    await tx.contributionSchedule.update({
+      where: { id: schedule.id },
+      data: {
+        amountPaidMinor,
+        status: contributionScheduleStatusFor({
+          amountDueMinor: schedule.amountDueMinor,
+          amountPaidMinor,
+          dueAt: schedule.dueAt,
+          now,
+        }),
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: input.userId,
+        action: 'ajo.contribution.paid',
+        subjectType: 'Contribution',
+        subjectId: contribution.id,
+        groupId: schedule.groupId,
+        metadata: { scheduleId: schedule.id, amountMinor: amountMinor.toString() },
+      },
+    });
+    return contribution;
   }
 
   /**
@@ -326,7 +366,7 @@ export class AjoSettlementService {
         select: { name: true },
       });
 
-      const poolAccount = await this.poolAccount(tx, groupId, schedule.currency);
+      const poolAccount = await this.poolAccountWithin(tx, groupId, schedule.currency);
       const walletAccount = await this.memberWalletAccount(tx, recipient.userId, schedule.currency);
 
       // The second guard. The schedule check above is the business rule and
@@ -416,7 +456,12 @@ export class AjoSettlementService {
    * person, and must never acquire the withdraw or spend capabilities that hang
    * off a wallet.
    */
-  private async poolAccount(tx: TransactionClient, groupId: string, currency: string) {
+  /**
+   * The ledger account holding one group's contributions, created on first use.
+   * Public so the shared payment contract credits the same account this
+   * service pays out from.
+   */
+  async poolAccountWithin(tx: TransactionClient, groupId: string, currency: string) {
     const code = poolAccountCode(groupId);
     const existing = await tx.financialAccount.findUnique({
       where: { code },

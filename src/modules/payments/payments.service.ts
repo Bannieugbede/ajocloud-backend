@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -8,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import {
-  AkawoDueStatus,
   FinancialAccountPurpose,
   LedgerEntryDirection,
   LedgerTransactionStatus,
@@ -26,7 +24,6 @@ import { FeesService } from '../fees/fees.service.js';
 import { TransactionPinService } from '../auth/transaction-pin.service.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import {
-  MINIMUM_DEPOSIT_MINOR,
   INTENT_TTL_MS,
   canPayFromWallet,
   isPayable,
@@ -35,15 +32,13 @@ import {
   totalFor,
 } from './domain/payment-policy.js';
 import { PAYMENT_PROVIDER, type PaymentProvider } from './providers/payment-provider.js';
+import {
+  PAYMENT_TARGETS,
+  type PaymentTarget,
+  type PaymentTargetRegistry,
+} from './targets/payment-target.js';
 import type { CreateIntentDto } from './dto/create-intent.dto.js';
 import type { ConfirmIntentDto } from './dto/confirm-intent.dto.js';
-
-/** What a target resolves to: how much, in what currency, and a label. */
-interface ResolvedTarget {
-  readonly amountMinor: bigint;
-  readonly currency: string;
-  readonly description: string;
-}
 
 export interface PaymentIntentView {
   readonly id: string;
@@ -55,6 +50,11 @@ export interface PaymentIntentView {
   readonly totalMinor: string;
   readonly currency: string;
   readonly method: PaymentMethod | null;
+  /**
+   * The methods this payment accepts, in the order to offer them. The client
+   * renders exactly these, so it never offers a method `confirm` would refuse.
+   */
+  readonly methods: readonly PaymentMethod[];
   readonly description: string;
   readonly expiresAt: string;
   readonly settledAt: string | null;
@@ -73,34 +73,43 @@ export class PaymentsService {
     private readonly audit: AuditService,
     private readonly fees: FeesService,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    @Inject(PAYMENT_TARGETS) private readonly targets: PaymentTargetRegistry,
   ) {}
 
   /**
    * Creates an intent for a target.
    *
-   * The amount comes from `resolveTarget`, which reads it from the target row —
-   * never from the request — so a caller cannot settle a large due for one
-   * naira. A wallet top-up is the one exception, because it has no row to read:
-   * there the user is choosing how much of their own money to bring in.
+   * The amount comes from the target (see `PaymentTarget.amountRule`): read
+   * from its row, so a caller cannot settle a large due for one naira; chosen
+   * by the payer only for a wallet top-up; or, where the target allows part
+   * payment, at most what is still owed.
    */
   async create(
     userId: string,
     dto: CreateIntentDto,
     idempotencyKey: string,
   ): Promise<PaymentIntentView> {
+    const handler = this.targets[dto.targetType];
     const existing = await this.prisma.paymentIntent.findUnique({
       where: { userId_idempotencyKey: { userId, idempotencyKey } },
     });
     // A retried tap returns the original intent rather than an error: the client
     // that retried needs the same answer, not a conflict it cannot act on.
-    if (existing) return this.view(existing, (await this.describe(existing.targetType)) ?? '');
+    if (existing) return this.view(existing, await this.describe(existing));
 
-    const target = await this.resolveTarget(
+    // The single place a client amount enters. A fixed target refuses one
+    // outright rather than ignoring it, so a client that sends one learns it is
+    // wrong instead of believing it underpaid successfully.
+    const requestedAmountMinor = dto.amountMinor === undefined ? null : BigInt(dto.amountMinor);
+    if (requestedAmountMinor !== null && handler.amountRule === 'fixed') {
+      throw new UnprocessableEntityException('The amount for this payment cannot be changed');
+    }
+
+    const target = await handler.resolve(
       this.prisma,
       userId,
-      dto.targetType,
       dto.targetId ?? null,
-      dto.amountMinor === undefined ? null : BigInt(dto.amountMinor),
+      requestedAmountMinor,
     );
     if (!isPayableAmount(target.amountMinor)) {
       throw new UnprocessableEntityException('This item has nothing to pay');
@@ -165,10 +174,18 @@ export class PaymentsService {
     // Already settled by an earlier identical request: return it unchanged
     // rather than charging a second time.
     if (intent.status !== PaymentIntentStatus.REQUIRES_CONFIRMATION) {
-      return this.view(intent, (await this.describe(intent.targetType)) ?? '');
+      return this.view(intent, await this.describe(intent));
     }
     if (!isPayable(intent.status, intent.expiresAt, new Date())) {
       throw new ConflictException('This payment has expired. Start it again.');
+    }
+    // Checked before the PIN, so an unsupported method costs no PIN attempt.
+    if (!this.targets[intent.targetType].methods.includes(dto.method)) {
+      throw new UnprocessableEntityException(
+        dto.method === PaymentMethod.WALLET
+          ? 'This payment cannot be made from your wallet'
+          : 'Pay this from your wallet. Add money to your wallet first if you need to.',
+      );
     }
 
     await this.pins.verifyPin(userId, dto.transactionPin);
@@ -201,18 +218,19 @@ export class PaymentsService {
 
       // Re-resolved inside the transaction: the amount is only trustworthy if
       // the target still says so at the moment money moves.
-      const target = await this.resolveTarget(
+      const handler = this.targets[intent.targetType];
+      const target = await handler.resolve(
         tx,
         userId,
-        intent.targetType,
         intent.targetId,
-        intent.amountMinor,
+        this.storedRequest(handler, intent.amountMinor),
       );
       if (target.amountMinor !== intent.amountMinor) {
         throw new ConflictException('The amount changed. Start this payment again.');
       }
 
       const accounts = await this.accounts(tx, intent.walletId, intent.currency);
+      const destination = await handler.creditAccount(tx, intent.targetId, intent.currency);
       const available = await this.ledger.accountBalanceWithin(tx, accounts.available.id);
       if (!canPayFromWallet(available, intent.totalMinor)) {
         throw new UnprocessableEntityException('Your wallet balance is not enough');
@@ -232,7 +250,7 @@ export class PaymentsService {
             amountMinor: intent.totalMinor,
           },
           {
-            accountId: accounts.destination.id,
+            accountId: destination.id,
             direction: 'CREDIT',
             amountMinor: intent.amountMinor,
           },
@@ -250,7 +268,14 @@ export class PaymentsService {
         ],
       });
 
-      await this.transitionTarget(tx, intent.targetType, intent.targetId, posting.id);
+      await handler.settle(tx, {
+        userId,
+        targetId: intent.targetId,
+        intentId: intent.id,
+        amountMinor: intent.amountMinor,
+        currency: intent.currency,
+        ledgerTransactionId: posting.id,
+      });
 
       return tx.paymentIntent.update({
         where: { id: intent.id },
@@ -276,7 +301,7 @@ export class PaymentsService {
       },
     });
 
-    return this.view(settled, (await this.describe(settled.targetType)) ?? '');
+    return this.view(settled, await this.describe(settled));
   }
 
   /**
@@ -300,12 +325,12 @@ export class PaymentsService {
       where: { id: userId },
       select: { email: true },
     });
-    const target = await this.resolveTarget(
+    const handler = this.targets[intent.targetType];
+    const target = await handler.resolve(
       this.prisma,
       userId,
-      intent.targetType,
       intent.targetId,
-      intent.amountMinor,
+      this.storedRequest(handler, intent.amountMinor),
     );
 
     const input = {
@@ -342,13 +367,7 @@ export class PaymentsService {
       where: { id: intentId, userId },
     });
     if (!intent) throw new NotFoundException('Payment was not found');
-    const target = await this.resolveTarget(
-      this.prisma,
-      userId,
-      intent.targetType,
-      intent.targetId,
-    ).catch(() => null);
-    return this.view(intent, target?.description ?? '');
+    return this.view(intent, await this.describe(intent));
   }
 
   /** Available wallet balance, so the client can offer or grey out the wallet. */
@@ -385,135 +404,32 @@ export class PaymentsService {
   }
 
   /**
-   * Reads what a target costs, and proves the caller is allowed to pay it.
-   *
-   * Authorisation lives here rather than in the controller because this is the
-   * one place every payment passes through, on both create and settle.
+   * What to pass a target as the requested amount when re-resolving a stored
+   * intent: the amount already quoted, for a target whose payer chose it, and
+   * nothing for a fixed one, which must still read the same from its row.
    */
-  private async resolveTarget(
-    client: PrismaService | TransactionClient,
-    userId: string,
-    targetType: PaymentTargetType,
-    targetId: string | null,
-    /**
-     * Only consulted for a wallet top-up, which has no row to read an amount
-     * from. On settlement this is the amount already stored on the intent, so
-     * the re-resolution still compares against what the user was quoted rather
-     * than against a fresh client value.
-     */
-    requestedAmountMinor: bigint | null = null,
-  ): Promise<ResolvedTarget> {
-    switch (targetType) {
-      case PaymentTargetType.AKAWO_POOL_DUE: {
-        if (!targetId) throw new BadRequestException('A due is required');
-        const due = await client.akawoPoolDue.findUnique({
-          where: { id: targetId },
-          include: { pool: { select: { name: true } }, member: { select: { userId: true } } },
-        });
-        if (!due) throw new NotFoundException('This payment was not found');
-        // Scoped to the member who owes it: one member must not be able to pay,
-        // or probe the amount of, another's due.
-        if (due.member.userId !== userId) {
-          throw new NotFoundException('This payment was not found');
-        }
-        if (due.status !== AkawoDueStatus.PENDING) {
-          throw new ConflictException('This has already been settled');
-        }
-        return {
-          amountMinor: due.amountMinor,
-          currency: due.currency,
-          description: `Akawo pool: ${due.pool.name}`,
-        };
-      }
-      case PaymentTargetType.WALLET_TOPUP: {
-        // The one target with no row to read an amount from: the user chooses
-        // how much of their own money to bring in. Accepted here and nowhere
-        // else, so it cannot be used to underpay a due that has its own amount.
-        if (requestedAmountMinor === null) {
-          throw new UnprocessableEntityException('Choose how much you want to add');
-        }
-        if (requestedAmountMinor < MINIMUM_DEPOSIT_MINOR) {
-          throw new UnprocessableEntityException(
-            `The smallest amount you can add is ${(MINIMUM_DEPOSIT_MINOR / 100n).toString()} naira`,
-          );
-        }
-        const wallet = await client.wallet.findFirst({
-          where: { userId },
-          select: { currency: true },
-        });
-        return {
-          amountMinor: requestedAmountMinor,
-          currency: wallet?.currency ?? 'NGN',
-          description: 'Wallet top-up',
-        };
-      }
-      case PaymentTargetType.AJO_CONTRIBUTION:
-      case PaymentTargetType.FOOD_SUBSCRIPTION:
-        throw new UnprocessableEntityException('This payment type is not available yet');
-      default: {
-        // Exhaustiveness: adding a target type without a branch fails to compile
-        // rather than silently resolving to nothing.
-        const unreachable: never = targetType;
-        throw new BadRequestException(`Unsupported payment target: ${String(unreachable)}`);
-      }
-    }
+  private storedRequest(handler: PaymentTarget, amountMinor: bigint): bigint | null {
+    return handler.amountRule === 'fixed' ? null : amountMinor;
+  }
+
+  /** A label for an intent's target, which may since have been paid or removed. */
+  private describe(intent: {
+    targetType: PaymentTargetType;
+    targetId: string | null;
+  }): Promise<string> {
+    return this.targets[intent.targetType].describe(this.prisma, intent.targetId);
   }
 
   /**
-   * Transitions the paid-for thing, in the same transaction as the posting.
-   *
-   * This is the only place an Akawo due may reach PAID, which is what ADR-007
-   * requires: the pool module contains no path that writes it.
-   */
-  private async transitionTarget(
-    tx: TransactionClient,
-    targetType: PaymentTargetType,
-    targetId: string | null,
-    ledgerTransactionId: string,
-  ): Promise<void> {
-    if (targetType === PaymentTargetType.AKAWO_POOL_DUE && targetId) {
-      await tx.akawoPoolDue.update({
-        where: { id: targetId },
-        data: {
-          status: AkawoDueStatus.PAID,
-          ledgerTransactionId,
-          paidAt: new Date(),
-        },
-      });
-    }
-  }
-
-  /** A short human label for a target type, used when the row is gone. */
-  private describe(targetType: PaymentTargetType): Promise<string> {
-    const labels: Record<PaymentTargetType, string> = {
-      AKAWO_POOL_DUE: 'Akawo pool payment',
-      AJO_CONTRIBUTION: 'Ajo contribution',
-      FOOD_SUBSCRIPTION: 'Food subscription',
-      WALLET_TOPUP: 'Wallet top-up',
-    };
-    return Promise.resolve(labels[targetType]);
-  }
-
-  /**
-   * The accounts a payment moves between.
-   *
-   * `destination` is provider-payable: money leaving a wallet for a pool is held
-   * there until it is disbursed, so it is never simply removed from the books.
+   * The payer's side of a wallet payment: the wallet it leaves, and where a fee
+   * goes. Where the money arrives is the target's to say (`creditAccount`).
    */
   private async accounts(tx: TransactionClient, walletId: string, currency: string) {
-    const [available, destination, feeRevenue] = await Promise.all([
+    const [available, feeRevenue] = await Promise.all([
       tx.financialAccount.findFirst({
         where: {
           walletId,
           purpose: FinancialAccountPurpose.WALLET_AVAILABLE,
-          currency,
-          isActive: true,
-        },
-      }),
-      tx.financialAccount.findFirst({
-        where: {
-          walletId: null,
-          purpose: FinancialAccountPurpose.PROVIDER_PAYABLE,
           currency,
           isActive: true,
         },
@@ -527,10 +443,10 @@ export class PaymentsService {
         },
       }),
     ]);
-    if (!available || !destination || !feeRevenue) {
+    if (!available || !feeRevenue) {
       throw new UnprocessableEntityException('Required financial accounts are not configured');
     }
-    return { available, destination, feeRevenue };
+    return { available, feeRevenue };
   }
 
   /** BigInt money is serialised as strings, per the repository-wide convention. */
@@ -561,6 +477,7 @@ export class PaymentsService {
       totalMinor: intent.totalMinor.toString(),
       currency: intent.currency,
       method: intent.method,
+      methods: this.targets[intent.targetType].methods,
       description,
       expiresAt: intent.expiresAt.toISOString(),
       settledAt: intent.settledAt?.toISOString() ?? null,

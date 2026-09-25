@@ -220,7 +220,12 @@ describe('FoodAjoCoordinatorService', () => {
       });
       // 50 places, but only 4 portions taken.
       prisma.foodSubscription.groupBy.mockResolvedValue([
-        { packageId: 'package-id', _sum: { quantity: 4 }, _count: { _all: 3 } },
+        // Three members hold four portions; only two portions are paid for.
+        {
+          packageId: 'package-id',
+          _sum: { quantity: 4, amountPaidMinor: 8_000_000n },
+          _count: { _all: 3 },
+        },
       ]);
       prisma.foodPackage.findMany.mockResolvedValue([
         {
@@ -235,11 +240,15 @@ describe('FoodAjoCoordinatorService', () => {
       const plan = (await service.procurementPlan('coordinator-id', 'programme-id')) as {
         totalPortions: number;
         expectedMinor: string;
+        collectedMinor: string;
         packages: { portions: number; items: { totalQuantity: string }[] }[];
       };
 
       expect(plan.totalPortions).toBe(4);
       expect(plan.expectedMinor).toBe('16000000');
+      // What has arrived is reported beside what is owed, so buying can be sized
+      // by money actually held.
+      expect(plan.collectedMinor).toBe('8000000');
       // The shopping list scales with portions taken: 4 x 10kg.
       expect(plan.packages[0]?.items[0]?.totalQuantity).toBe('40.000');
     });

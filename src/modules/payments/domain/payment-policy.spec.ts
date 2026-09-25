@@ -1,10 +1,12 @@
 import {
   INTENT_TTL_MS,
+  PaymentAmountError,
   canPayFromWallet,
   isConfirmable,
   isPayable,
   isPayableAmount,
   isTerminal,
+  partialAmount,
   settlesSynchronously,
   totalFor,
 } from './payment-policy.js';
@@ -105,5 +107,31 @@ describe('canPayFromWallet', () => {
 describe('INTENT_TTL_MS', () => {
   it('is long enough to enter a PIN but short enough that the amount stays current', () => {
     expect(INTENT_TTL_MS).toBe(15 * 60 * 1000);
+  });
+});
+
+describe('partialAmount', () => {
+  it('takes everything still owed when no amount is named', () => {
+    expect(partialAmount(5_000n, null)).toBe(5_000n);
+  });
+
+  it('takes part of what is owed', () => {
+    expect(partialAmount(5_000n, 1_200n)).toBe(1_200n);
+  });
+
+  it('takes exactly what is owed', () => {
+    expect(partialAmount(5_000n, 5_000n)).toBe(5_000n);
+  });
+
+  it('refuses more than is owed rather than keeping the difference', () => {
+    expect(() => partialAmount(5_000n, 5_001n)).toThrow(PaymentAmountError);
+  });
+
+  it.each([0n, -1n])('refuses %s', (amount) => {
+    expect(() => partialAmount(5_000n, amount)).toThrow(PaymentAmountError);
+  });
+
+  it('refuses anything once nothing is owed', () => {
+    expect(() => partialAmount(0n, null)).toThrow('already been paid in full');
   });
 });

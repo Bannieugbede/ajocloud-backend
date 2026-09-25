@@ -118,6 +118,11 @@ enum FinancialAccountPurpose {
   /// a wallet, so a group can never acquire the withdraw or spend capabilities
   /// a wallet carries. See ADR-011.
   AJO_GROUP_POOL
+  /// Holds one Food Ajo programme's paid subscriptions until procurement. A
+  /// liability for the same reason as an Ajo pool: the money belongs to the
+  /// members until it is spent on their food, and it is refunded from here if
+  /// a member withdraws before buying begins.
+  FOOD_PROGRAMME_ESCROW
 }
 
 enum LedgerTransactionStatus {

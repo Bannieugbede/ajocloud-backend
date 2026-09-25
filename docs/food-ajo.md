@@ -24,6 +24,18 @@ the coordinator lifecycle, procurement, and distribution tooling are implemented
   portions rather than members, so a member raising their quantity cannot oversubscribe the
   programme. Only an `OPEN` programme accepts enrolment.
 - `POST /api/v1/food-ajo/programmes/:programmeId/unsubscribe` — withdraw an unfulfilled enrolment.
+  A paid one is refunded to the wallet, but only while the programme is `OPEN`.
+
+## Paying for an enrolment
+
+An enrolment is created `PENDING` and paid through the shared payment contract with target
+`FOOD_SUBSCRIPTION` and the subscription's id (see `docs/payments.md`). It costs the package's
+locked price for each portion, is paid in full from the wallet, and becomes `ACTIVE` once paid.
+The money is held in the programme's `FOOD_PROGRAMME_ESCROW` account, a liability: it belongs to
+the members until it buys their food. `GET …/subscriptions/mine` returns `amountDueMinor` and
+`amountPaidMinor` for each enrolment, and the procurement plan reports `collectedMinor` beside
+`expectedMinor`, so orders can be sized by money actually held.
+
 - `POST /api/v1/food-ajo/distributions/:distributionId/collection-code` — the member's own one-time
   collection code, returned once. See "Collection evidence" below for why the member issues it.
 
@@ -107,8 +119,7 @@ would erase the record that somebody never received what they paid for.
 
 ## Not yet implemented
 
-Contributions are not yet collected against a programme: the payment intent target
-`FOOD_SUBSCRIPTION` exists, but no route settles a subscription, so `expectedMinor` in the
-procurement plan is what members owe rather than what has been received. Coordinator
+Escrow is not yet released to a vendor: paid enrolments accumulate in the programme's escrow
+account, and paying a purchase order from it is still to be built. Coordinator
 suspension/revocation, automated KYC/risk/bank checks, and missing-item or non-delivery disputes
 also remain outstanding.
