@@ -5,7 +5,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   AjoCycleStatus,
   AjoContributionMode,
@@ -22,7 +22,12 @@ import type { Environment } from '../../config/env.schema.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { assertSlotCapacity, resolveMaxSlotsPerMember } from './domain/ajo-policy.js';
-import { digestInvitationCode } from './domain/invitation-code.js';
+import { normalisePublicCode } from '../../common/links/share-code.js';
+import {
+  canonicalInvitationCode,
+  digestInvitationCode,
+  generateInvitationCode,
+} from './domain/invitation-code.js';
 import { assertAjoGroupBounds, generateRotationSchedule } from './domain/ajo-schedule.js';
 import type { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import type { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
@@ -58,7 +63,7 @@ export class AjoGroupsService {
       throw new UnprocessableEntityException('Flexible Ajo requires a contribution unit');
     }
     const unitMinor = BigInt(contributionUnitMinor);
-    const invitationCode = randomBytes(32).toString('base64url');
+    const invitationCode = generateInvitationCode();
     const tokenDigest = this.digest(invitationCode);
     const created = await this.transactions.serializable(async (tx) => {
       const group = await tx.ajoGroup.create({
@@ -137,7 +142,14 @@ export class AjoGroupsService {
       });
       return group;
     });
-    return { id: created.id, name: created.name, status: created.status, invitationCode };
+    return {
+      id: created.id,
+      name: created.name,
+      status: created.status,
+      invitationCode,
+      shortCode: created.shortCode,
+      publiclyListed: created.publiclyListed,
+    };
   }
 
   async list(userId: string): Promise<unknown[]> {
@@ -155,6 +167,8 @@ export class AjoGroupsService {
         maxMembers: true,
         startDate: true,
         endDate: true,
+        shortCode: true,
+        publiclyListed: true,
         _count: { select: { slots: true, members: true } },
         // Who runs the group, so the list can say so without a request per
         // card. Only the admin membership is read; every other member's
@@ -231,6 +245,8 @@ export class AjoGroupsService {
         startDate: true,
         endDate: true,
         lockedAt: true,
+        shortCode: true,
+        publiclyListed: true,
         members: {
           select: {
             id: true,
@@ -272,8 +288,15 @@ export class AjoGroupsService {
     };
   }
 
+  /**
+   * Joins a group with the code from a link: an invitation, or the group's
+   * public code when its administrator has listed it. A listed group is open
+   * to anyone who finds it, so its public code admits without an invitation
+   * being spent; the same code is refused the moment the group is unlisted.
+   */
   async join(userId: string, groupId: string, dto: JoinAjoGroupDto): Promise<unknown> {
-    const digest = this.digest(dto.invitationCode);
+    const publicCode = normalisePublicCode(dto.invitationCode);
+    const invitationCode = canonicalInvitationCode(dto.invitationCode);
     return this.transactions.serializable(async (tx) => {
       const group = await tx.ajoGroup.findUnique({
         where: { id: groupId },
@@ -290,13 +313,21 @@ export class AjoGroupsService {
       if (group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
         throw new ConflictException('This group no longer accepts members');
       }
-      const invitation = await tx.groupInvitation.findUnique({ where: { tokenDigest: digest } });
+      const viaListing =
+        publicCode !== null && group.publiclyListed && group.shortCode === publicCode;
+      const invitation =
+        !viaListing && invitationCode
+          ? await tx.groupInvitation.findUnique({
+              where: { tokenDigest: this.digest(invitationCode) },
+            })
+          : null;
       if (
-        !invitation ||
-        invitation.groupId !== groupId ||
-        invitation.status !== GroupInvitationStatus.ACTIVE ||
-        invitation.expiresAt <= new Date() ||
-        invitation.useCount >= invitation.maxUses
+        !viaListing &&
+        (!invitation ||
+          invitation.groupId !== groupId ||
+          invitation.status !== GroupInvitationStatus.ACTIVE ||
+          invitation.expiresAt <= new Date() ||
+          invitation.useCount >= invitation.maxUses)
       ) {
         throw new ForbiddenException('Invitation is invalid or expired');
       }
@@ -337,10 +368,12 @@ export class AjoGroupsService {
           currency: group.currency,
         },
       });
-      await tx.groupInvitation.update({
-        where: { id: invitation.id },
-        data: { useCount: { increment: 1 } },
-      });
+      if (invitation) {
+        await tx.groupInvitation.update({
+          where: { id: invitation.id },
+          data: { useCount: { increment: 1 } },
+        });
+      }
       await tx.auditLog.create({
         data: {
           actorUserId: userId,
@@ -348,9 +381,58 @@ export class AjoGroupsService {
           subjectType: 'AjoGroupMember',
           subjectId: member.id,
           groupId,
+          metadata: { via: viaListing ? 'listing' : 'invitation' },
         },
       });
       return { memberId: member.id, slots: dto.requestedSlots };
+    });
+  }
+
+  /**
+   * Lists or unlists a group. Only its active administrator may, and only a
+   * group that still accepts members can be listed: listing one that has
+   * locked its rotation would publish a page nobody can act on. Unlisting is
+   * always allowed, and takes effect at once — the public code stops
+   * admitting anyone, and the page drops out of the sitemap.
+   */
+  async setListing(userId: string, groupId: string, listed: boolean): Promise<unknown> {
+    return this.transactions.serializable(async (tx) => {
+      const membership = await tx.ajoGroupMember.findUnique({
+        where: { groupId_userId: { groupId, userId } },
+        select: { role: true, status: true },
+      });
+      if (
+        !membership ||
+        membership.role !== AjoMemberRole.GROUP_ADMIN ||
+        membership.status !== AjoMemberStatus.ACTIVE
+      ) {
+        throw new ForbiddenException('Only this group’s active administrator can list it');
+      }
+      const group = await tx.ajoGroup.findUnique({
+        where: { id: groupId },
+        select: { status: true, publiclyListed: true },
+      });
+      if (!group) throw new NotFoundException('Ajo group was not found');
+      if (listed && group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
+        throw new ConflictException('Only a group that is still taking members can be listed');
+      }
+      const updated = await tx.ajoGroup.update({
+        where: { id: groupId },
+        data: { publiclyListed: listed },
+        select: { id: true, shortCode: true, publiclyListed: true },
+      });
+      if (group.publiclyListed !== listed) {
+        await tx.auditLog.create({
+          data: {
+            actorUserId: userId,
+            action: listed ? 'ajo.group.listed' : 'ajo.group.unlisted',
+            subjectType: 'AjoGroup',
+            subjectId: groupId,
+            groupId,
+          },
+        });
+      }
+      return updated;
     });
   }
 

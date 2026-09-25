@@ -12,6 +12,8 @@ import {
   KycStatus,
   KycTier,
 } from '../../../generated/prisma/enums.js';
+import { isUUID } from 'class-validator';
+import { normalisePublicCode } from '../../common/links/share-code.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import type { CreateFoodProgrammeDto } from './dto/create-food-programme.dto.js';
@@ -33,6 +35,7 @@ const programmeSelect = {
   endsAt: true,
   plannedProcurementAt: true,
   distributionAt: true,
+  shortCode: true,
   packages: {
     where: { isActive: true },
     select: {
@@ -174,10 +177,16 @@ export class FoodAjoProgrammesService {
    * id that does not exist. The coordinator's user id and the enrolment count
    * are withheld; the name and verification badge are what a member browsing
    * in the app sees.
+   *
+   * Addressed by the programme's short code, as in ajocloud.com/f/<code>, or by
+   * its id, which links shared before short codes carry.
    */
-  async publicPreview(programmeId: string): Promise<unknown> {
+  async publicPreview(idOrCode: string): Promise<unknown> {
+    const shortCode = normalisePublicCode(idOrCode);
+    const where = shortCode ? { shortCode } : isUUID(idOrCode) ? { id: idOrCode } : null;
+    if (!where) throw new NotFoundException('Food Ajo programme was not found');
     const programme = await this.prisma.foodAjoGroup.findUnique({
-      where: { id: programmeId },
+      where,
       select: programmeSelect,
     });
     if (
@@ -192,6 +201,7 @@ export class FoodAjoProgrammesService {
     // field later added to the select is not published here by accident.
     return this.serialize({
       id: described.id,
+      shortCode: described.shortCode,
       name: described.name,
       status: described.status,
       currency: described.currency,

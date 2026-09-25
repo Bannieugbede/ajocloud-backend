@@ -4,6 +4,26 @@
 
 ### Added
 
+- **Short share links, and opt-in public listing.** Every Ajo group, Akawo pool
+  and Food Ajo programme has a permanent 7-character `shortCode`, so the website
+  can serve `ajocloud.com/g/`, `/p/` and `/f/<code>` instead of UUIDs. Ajo
+  invitations are now 10 characters (`/g/<code>`) instead of 43; older codes
+  keep working until they expire. An Ajo group's administrator or a pool's
+  organiser can list it publicly: its page is indexed, it appears in the new
+  `GET /api/v1/public/listings` feed for the sitemap, and anyone can join from
+  it with the public code. Unlisted groups stay private, and their public code
+  admits nobody. See `docs/share-links.md`.
+
+### Fixed
+
+- **Invitation links point at the public site root.** A trailing `/admin` on
+  `ADMIN_WEB_URL` is stripped before an Ajo invitation link is built, as it
+  already was for staff invites. Supersedes the `fix/invitation-link-origin`
+  branch.
+- **The seeded Ajo invitation works.** It was stored as a bare SHA-256, which the
+  service never compares against, and was too short for join to accept. It is
+  now `AJTESTXY26`, digested with the application's own helper.
+
 - **Public previews for shared Akawo pools and Food programmes.**
   `GET /api/v1/public/akawo-pools/:joinCode` and
   `GET /api/v1/public/food-programmes/:programmeId` describe a pool or programme

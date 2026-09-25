@@ -31,6 +31,7 @@ import { NotificationPreferencesModule } from './modules/notifications/notificat
 import { AkawoModule } from './modules/akawo/akawo.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
 import { EngagementModule } from './modules/engagement/engagement.module.js';
+import { PublicListingsModule } from './modules/public-listings/public-listings.module.js';
 import { KycModule } from './modules/kyc/kyc.module.js';
 import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
 import { ReferralsModule } from './modules/referrals/referrals.module.js';
@@ -71,6 +72,7 @@ import { ReferralsApiModule } from './modules/referrals/referrals-api.module.js'
     AkawoModule,
     AdminModule,
     EngagementModule,
+    PublicListingsModule,
     KycModule,
     WebhooksModule,
     ReferralsModule,

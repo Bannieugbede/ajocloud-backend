@@ -11,6 +11,7 @@ import {
   AkawoPoolMemberStatus,
   AkawoPoolStatus,
 } from '../../../generated/prisma/enums.js';
+import { normalisePublicCode } from '../../common/links/share-code.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import {
   TransactionService,
@@ -43,6 +44,8 @@ const poolSelect = {
   referenceLabel: true,
   dueAt: true,
   closedAt: true,
+  shortCode: true,
+  publiclyListed: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -275,19 +278,23 @@ export class AkawoPoolsService {
 
   /**
    * Describes a pool to someone who is not signed in: the web page a shared
-   * pool link lands on.
+   * pool link lands on, ajocloud.com/p/<code>.
    *
    * Narrower than `preview`. The pool id is withheld, because joining goes by
    * code and nothing a stranger holds should address the pool directly. A pool
    * that has stopped accepting members reports exactly like an unknown code,
    * so a guessed code reveals nothing about pools that exist but are closed.
+   * Only a listed pool carries its `shortCode`, the address search engines
+   * index; a join code's page is for whoever was sent it.
    */
-  async publicPreview(joinCode: string): Promise<unknown> {
-    const pool = await this.findByJoinCode(joinCode);
+  async publicPreview(code: string): Promise<unknown> {
+    const pool = await this.findByJoinCode(code);
     if (!acceptsMembers(pool.status)) {
       throw new NotFoundException('That join code was not recognised');
     }
     return this.serialize({
+      kind: pool.publiclyListed ? 'listed' : 'code',
+      shortCode: pool.publiclyListed ? pool.shortCode : null,
       name: pool.name,
       purpose: pool.purpose,
       amountMinor: pool.amountMinor,
@@ -362,9 +369,18 @@ export class AkawoPoolsService {
         ...(dto.name ? { name: dto.name } : {}),
         ...(dto.purpose !== undefined ? { purpose: dto.purpose } : {}),
         ...(dueAt ? { dueAt } : {}),
+        ...(dto.publiclyListed !== undefined ? { publiclyListed: dto.publiclyListed } : {}),
       },
       select: poolSelect,
     });
+    if (dto.publiclyListed !== undefined && dto.publiclyListed !== pool.publiclyListed) {
+      await this.audit(
+        this.prisma,
+        organiserUserId,
+        poolId,
+        dto.publiclyListed ? 'akawo.pool.listed' : 'akawo.pool.unlisted',
+      );
+    }
     return this.serialize(updated);
   }
 
@@ -487,7 +503,7 @@ export class AkawoPoolsService {
   ) {
     const pool = await client.akawoPool.findUnique({
       where: { id: poolId },
-      select: { id: true, status: true, organiserUserId: true },
+      select: { id: true, status: true, organiserUserId: true, publiclyListed: true },
     });
     if (!pool) throw new NotFoundException('Pool was not found');
     if (pool.organiserUserId !== organiserUserId) {
@@ -496,16 +512,36 @@ export class AkawoPoolsService {
     return pool;
   }
 
-  private async findByJoinCode(joinCode: string) {
-    if (!isValidJoinCodeShape(joinCode)) {
+  /**
+   * The pool a code admits to: its 8-character join code, or the 7-character
+   * public code of a pool its organiser has listed. The lengths never overlap,
+   * so a code is only ever looked up as the kind its length says it is.
+   */
+  private async findByJoinCode(code: string) {
+    const select = {
+      ...poolSelect,
+      organiser: { select: { profile: { select: { firstName: true, lastName: true } } } },
+    } as const;
+    const publicCode = normalisePublicCode(code);
+    if (publicCode) {
+      const pool = await this.prisma.akawoPool.findUnique({
+        where: { shortCode: publicCode },
+        select,
+      });
+      // The public code of an unlisted pool admits nobody, and says so exactly
+      // as a wrong code does.
+      if (!pool || !pool.publiclyListed) {
+        throw new NotFoundException('That join code was not recognised');
+      }
+      return pool;
+    }
+
+    if (!isValidJoinCodeShape(code)) {
       throw new NotFoundException('That join code was not recognised');
     }
     const pool = await this.prisma.akawoPool.findUnique({
-      where: { joinCodeDigest: this.digest(normalizeJoinCode(joinCode)) },
-      select: {
-        ...poolSelect,
-        organiser: { select: { profile: { select: { firstName: true, lastName: true } } } },
-      },
+      where: { joinCodeDigest: this.digest(normalizeJoinCode(code)) },
+      select,
     });
     // A wrong code and a code for a pool that is not open report identically, so
     // a guessed code cannot be used to discover which pools exist.

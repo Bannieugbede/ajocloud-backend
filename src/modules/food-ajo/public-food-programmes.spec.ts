@@ -15,8 +15,10 @@ describe('the public Food programme preview', () => {
     {} as TransactionService,
   );
 
+  const ID = '11111111-2222-4333-8444-555555555555';
   const programme = {
-    id: 'programme-1',
+    id: ID,
+    shortCode: '7KQ3MZP',
     coordinatorUserId: 'coordinator-1',
     name: 'Family staples',
     status: FoodAjoStatus.OPEN,
@@ -38,9 +40,10 @@ describe('the public Food programme preview', () => {
 
   it('describes an open programme with its coordinator, but not their user id', async () => {
     prisma.foodAjoGroup.findUnique.mockResolvedValue(programme);
-    const preview = (await service.publicPreview('programme-1')) as Record<string, unknown>;
+    const preview = (await service.publicPreview(ID)) as Record<string, unknown>;
     expect(preview).toMatchObject({
-      id: 'programme-1',
+      id: ID,
+      shortCode: '7KQ3MZP',
       name: 'Family staples',
       contributionMinor: '1000000',
       coordinatorName: 'Bola Ade',
@@ -55,7 +58,7 @@ describe('the public Food programme preview', () => {
       ...programme,
       status: FoodAjoStatus.ACTIVE,
     });
-    await expect(service.publicPreview('programme-1')).resolves.toMatchObject({
+    await expect(service.publicPreview(ID)).resolves.toMatchObject({
       name: 'Family staples',
     });
   });
@@ -66,11 +69,32 @@ describe('the public Food programme preview', () => {
     ),
   )('reports a %s programme exactly like a missing one', async (status) => {
     prisma.foodAjoGroup.findUnique.mockResolvedValue({ ...programme, status });
-    await expect(service.publicPreview('programme-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.publicPreview(ID)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('reports a missing programme as not found', async () => {
     prisma.foodAjoGroup.findUnique.mockResolvedValue(null);
-    await expect(service.publicPreview('programme-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.publicPreview(ID)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('finds a programme by its short code, as ajocloud.com/f/<code> carries it', async () => {
+    prisma.foodAjoGroup.findUnique.mockResolvedValue(programme);
+    await service.publicPreview('7kq3mzp');
+    expect(prisma.foodAjoGroup.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { shortCode: '7KQ3MZP' } }),
+    );
+  });
+
+  it('still finds a programme by id, for links shared before short codes', async () => {
+    prisma.foodAjoGroup.findUnique.mockResolvedValue(programme);
+    await service.publicPreview(ID);
+    expect(prisma.foodAjoGroup.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: ID } }),
+    );
+  });
+
+  it('refuses anything that is neither, before looking it up', async () => {
+    await expect(service.publicPreview('../wallet')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.foodAjoGroup.findUnique).not.toHaveBeenCalled();
   });
 });

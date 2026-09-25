@@ -1,4 +1,12 @@
-import { IsDateString, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateAkawoPoolDto {
   @IsString()
@@ -45,9 +53,18 @@ export class UpdateAkawoPoolDto {
   @IsOptional()
   @IsDateString({ strict: true })
   dueAt?: string;
+
+  /**
+   * Publishes the pool at its permanent link, ajocloud.com/p/<code>, where
+   * search engines can find it and anyone can join without the join code.
+   */
+  @IsOptional()
+  @IsBoolean()
+  publiclyListed?: boolean;
 }
 
 export class JoinAkawoPoolDto {
+  /** The pool's join code, or its public code when the pool is listed. */
   @IsString()
   @MinLength(6)
   @MaxLength(16)

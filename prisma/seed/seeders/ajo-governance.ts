@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '../../../generated/prisma/client.js';
+import { digestInvitationCode } from '../../../src/modules/ajo-groups/domain/invitation-code.js';
 import {
   GroupInvitationStatus,
   GroupReferralCodeStatus,
@@ -12,15 +13,22 @@ import {
 /**
  * Ajo governance: schedule versions, invitations, referral codes, and swaps.
  *
- * Deterministic and clearly fake. The invitation and referral codes are seeded
- * as the same SHA-256 digests the service computes, so the plaintext codes below
- * genuinely work against `POST /ajo-groups/join` rather than only looking right
- * in the database.
+ * Deterministic and clearly fake. The invitation is seeded as the same peppered
+ * HMAC the service computes, with the application's own helper, so the
+ * plaintext code below genuinely works at ajocloud.com/g/<code> and against
+ * `POST /ajo-groups/:groupId/join` rather than only looking right in the
+ * database.
  */
 
 /** Plaintext codes a developer can actually use locally. */
-export const SEEDED_INVITATION_CODE = 'AJOTEST-INVITE-2026';
+export const SEEDED_INVITATION_CODE = 'AJTESTXY26';
 export const SEEDED_REFERRAL_CODE = 'AJOTEST-REFERRAL-2026';
+
+function tokenPepper(): string {
+  const pepper = process.env.TOKEN_PEPPER;
+  if (!pepper) throw new Error('TOKEN_PEPPER is required for Ajo invitation seed data');
+  return pepper;
+}
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -92,7 +100,7 @@ export async function seedAjoGovernance(prisma: PrismaClient): Promise<void> {
       id: INVITATION_ID,
       groupId: GROUP_ID,
       createdByMemberId: admin.id,
-      tokenDigest: digest(SEEDED_INVITATION_CODE),
+      tokenDigest: digestInvitationCode(SEEDED_INVITATION_CODE, tokenPepper()),
       status: GroupInvitationStatus.ACTIVE,
       maxUses: 25,
       useCount: 1,

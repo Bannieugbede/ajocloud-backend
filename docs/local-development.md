@@ -30,7 +30,7 @@ application uses, so they genuinely work rather than only looking right:
 | Password (all)      | `Password`                                |
 | Email verification  | `222222` for `email.pending@example.test` |
 | Transaction PIN     | `1357` for `ada.admin@example.test`       |
-| Ajo invitation code | `AJOTEST-INVITE-2026`                     |
+| Ajo invitation code | `AJTESTXY26` (open `/g/AJTESTXY26`)       |
 | Ajo referral code   | `AJOTEST-REFERRAL-2026`                   |
 
 Mock identity checks stay strict: test identifiers must end in `0001` to pass,

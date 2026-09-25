@@ -18,6 +18,8 @@ const openPool = {
   status: 'OPEN',
   referenceLabel: 'Matric number',
   dueAt: new Date('2026-10-01T00:00:00Z'),
+  shortCode: '7KQ3MZP',
+  publiclyListed: false,
   organiser: { profile: { firstName: 'Ada', lastName: 'Obi' } },
 };
 
@@ -26,6 +28,8 @@ describe('the public pool preview', () => {
     const { service } = build(openPool);
     const preview = (await service.publicPreview(CODE)) as Record<string, unknown>;
     expect(preview).toEqual({
+      kind: 'code',
+      shortCode: null,
       name: 'Class of 2026 dues',
       purpose: 'Graduation dinner',
       amountMinor: '500000',
@@ -57,5 +61,31 @@ describe('the public pool preview', () => {
     const { service } = build({ ...openPool, organiser: { profile: null } });
     const preview = (await service.publicPreview(CODE)) as Record<string, unknown>;
     expect(preview.organiserName).toBe('Pool organiser');
+  });
+
+  it('looks a join code up by its digest', async () => {
+    const { service, prisma } = build(openPool);
+    await service.publicPreview(CODE);
+    const [[query]] = prisma.akawoPool.findUnique.mock.calls as [[{ where: object }]];
+    expect(Object.keys(query.where)).toEqual(['joinCodeDigest']);
+  });
+
+  describe('by public code, ajocloud.com/p/<code>', () => {
+    it('describes a listed pool, with the code search engines index', async () => {
+      const { service, prisma } = build({ ...openPool, publiclyListed: true });
+      const preview = (await service.publicPreview('7kq3mzp')) as Record<string, unknown>;
+      expect(prisma.akawoPool.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { shortCode: '7KQ3MZP' } }),
+      );
+      expect(preview).toMatchObject({ kind: 'listed', shortCode: '7KQ3MZP' });
+      expect(preview).not.toHaveProperty('id');
+    });
+
+    it('reports an unlisted pool exactly like an unknown code', async () => {
+      const { service } = build(openPool);
+      await expect(service.publicPreview('7KQ3MZP')).rejects.toThrow(
+        'That join code was not recognised',
+      );
+    });
   });
 });

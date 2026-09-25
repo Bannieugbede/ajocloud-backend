@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PublicEndpoint } from '../../common/decorators/public-endpoint.decorator.js';
@@ -16,10 +16,11 @@ import { FoodAjoProgrammesService } from './food-ajo-programmes.service.js';
 export class PublicFoodProgrammesController {
   constructor(private readonly programmes: FoodAjoProgrammesService) {}
 
-  @Get(':programmeId')
+  /** By short code (ajocloud.com/f/<code>) or, for older links, by id. */
+  @Get(':idOrCode')
   @PublicEndpoint()
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  preview(@Param('programmeId', ParseUUIDPipe) programmeId: string) {
-    return this.programmes.publicPreview(programmeId);
+  preview(@Param('idOrCode') idOrCode: string) {
+    return this.programmes.publicPreview(idOrCode);
   }
 }

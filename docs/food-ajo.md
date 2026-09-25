@@ -15,8 +15,8 @@ the coordinator lifecycle, procurement, and distribution tooling are implemented
   coordinated programmes.
 - `GET /api/v1/food-ajo/programmes/:programmeId` — guarded programme detail.
 - `GET /api/v1/food-ajo/programmes/subscriptions/mine` — the caller's own enrolments.
-- `GET /api/v1/public/food-programmes/:programmeId` — **public**, for the web page a shared
-  programme link lands on. Only `OPEN` and `ACTIVE` programmes, the ones a member can already
+- `GET /api/v1/public/food-programmes/:idOrCode` — **public**, for the web page a shared
+  programme link lands on (`ajocloud.com/f/<shortCode>`; the id still works for older links). Only `OPEN` and `ACTIVE` programmes, the ones a member can already
   find in the app; anything else reports as not found. Returns the programme, its active packages
   and the coordinator's name and verification badge. The coordinator's user id and the enrolment
   count are withheld. Rate limited to 30 a minute.

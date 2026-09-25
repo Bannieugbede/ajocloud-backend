@@ -1,4 +1,9 @@
-import { digestInvitationCode, generateInvitationCode } from './invitation-code.js';
+import {
+  INVITATION_CODE_LENGTH,
+  canonicalInvitationCode,
+  digestInvitationCode,
+  generateInvitationCode,
+} from './invitation-code.js';
 
 describe('invitation codes', () => {
   it('generates a distinct code each time', () => {
@@ -6,14 +11,32 @@ describe('invitation codes', () => {
     expect(codes.size).toBe(50);
   });
 
-  it('generates URL-safe codes, since they travel in a path segment', () => {
+  it('generates short, URL-safe codes, since they travel in a link', () => {
     for (let i = 0; i < 20; i += 1) {
-      expect(generateInvitationCode()).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(generateInvitationCode()).toMatch(/^[2345679ACDEFGHJKMNPQRTUVWXYZ]{10}$/);
     }
+    expect(INVITATION_CODE_LENGTH).toBe(10);
   });
 
-  it('generates at least 32 characters, which is what join requires', () => {
-    expect(generateInvitationCode().length).toBeGreaterThanOrEqual(32);
+  it('reads a current code case-insensitively, as people retype it', () => {
+    const code = generateInvitationCode();
+    expect(canonicalInvitationCode(code.toLowerCase())).toBe(code);
+    expect(canonicalInvitationCode(` ${code.slice(0, 5)}-${code.slice(5)} `)).toBe(code);
+  });
+
+  it('keeps a legacy code exactly, because base64url is case-sensitive', () => {
+    const legacy = 'q7Xv3nRk2LpZ8sWt4YbG1mHc6dJfN0uA9eKiOxPzQrE';
+    expect(canonicalInvitationCode(legacy)).toBe(legacy);
+  });
+
+  it.each([
+    ['a public group code', '7KQ3MZP'],
+    ['a short junk string', 'abc123'],
+    ['a path', '../../admin'],
+    ['something enormous', 'a'.repeat(500)],
+    ['not a string', 7],
+  ])('refuses %s', (_label, input) => {
+    expect(canonicalInvitationCode(input)).toBeNull();
   });
 
   it('is deterministic, so a stored digest still matches later', () => {

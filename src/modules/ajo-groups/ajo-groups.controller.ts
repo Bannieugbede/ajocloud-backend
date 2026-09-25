@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -18,7 +19,7 @@ import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { PermissionsGuard } from '../permissions/permissions.guard.js';
 import { AjoGroupsService } from './ajo-groups.service.js';
 import { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
-import { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
+import { JoinAjoGroupDto, SetGroupListingDto } from './dto/join-ajo-group.dto.js';
 import { CreateSwapRequestDto, DecideSwapRequestDto } from './dto/create-swap-request.dto.js';
 import { AjoSettlementService } from './ajo-settlement.service.js';
 import { AjoSwapsService } from './ajo-swaps.service.js';
@@ -50,7 +51,8 @@ export class AjoGroupsController {
   }
 
   /**
-   * Resolves an invitation code to the group it admits.
+   * Resolves a link's code — an invitation, or a listed group's public code —
+   * to the group it admits.
    *
    * Authenticated, unlike the public preview: this hands back a group id, which
    * is what the join call needs and what the anonymous preview deliberately
@@ -73,6 +75,20 @@ export class AjoGroupsController {
     @Body() dto: JoinAjoGroupDto,
   ) {
     return this.groups.join(user.userId, groupId, dto);
+  }
+
+  /**
+   * Lists the group publicly, or takes it down. A listed group has an indexed
+   * page at its permanent link and can be joined from it without an
+   * invitation. Its administrator only.
+   */
+  @Patch(':groupId/listing')
+  setListing(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Body() dto: SetGroupListingDto,
+  ) {
+    return this.groups.setListing(user.userId, groupId, dto.listed);
   }
 
   /**

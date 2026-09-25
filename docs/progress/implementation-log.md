@@ -1,5 +1,19 @@
 # Implementation log
 
+## 2026-09-25 — Short share links and public listing
+
+- Added `shortCode` (all three products) and `publiclyListed` (Ajo groups, Akawo
+  pools) in migration `20260925120000_short_links`, with a `share_code(n)`
+  database function as the column default and a clash-checked backfill.
+- Ajo invitations are 10 characters; `canonicalInvitationCode` keeps 43-character
+  legacy codes redeemable. Listed groups and pools can be previewed and joined by
+  public code. New `PATCH /ajo-groups/:groupId/listing`,
+  `GET /public/ajo-groups/:code` and `GET /public/listings`.
+- Validation: the migration was applied to a throwaway local Postgres after every
+  earlier migration, over 1,000 existing rows, and re-run to confirm it is
+  idempotent; `prisma migrate diff` shows no drift for the new columns. Typecheck,
+  lint and the full unit suite pass.
+
 ## 2026-08-07 — Public engagement API (waitlist + support)
 
 - Added a public `EngagementModule` under `/api/v1/engagement` with
@@ -294,4 +308,3 @@
 - Files: `src/modules/akawo/public-akawo-pools.controller.ts`, `src/modules/akawo/akawo-pools.service.ts`, `src/modules/food-ajo/public-food-programmes.controller.ts`, `src/modules/food-ajo/food-ajo-programmes.service.ts`, the two module wirings, `docs/akawo.md`, `docs/food-ajo.md`.
 - Tests: 13 new (`public-akawo-pools.spec.ts`, `public-food-programmes.spec.ts`), covering hidden fields, non-joinable states and malformed codes.
 - Quality: lint, strict typecheck and Prettier clean. Build not run.
-

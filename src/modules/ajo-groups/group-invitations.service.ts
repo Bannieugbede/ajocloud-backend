@@ -7,14 +7,21 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AjoGroupStatus,
+  AjoMemberRole,
   AjoMemberStatus,
   GroupInvitationStatus,
 } from '../../../generated/prisma/enums.js';
+import { publicWebUrl } from '../../common/links/public-web-url.js';
+import { normalisePublicCode } from '../../common/links/share-code.js';
 import type { Environment } from '../../config/env.schema.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionService } from '../../infrastructure/database/transaction.service.js';
 import type { CreateGroupInvitationDto } from './dto/create-group-invitation.dto.js';
-import { digestInvitationCode, generateInvitationCode } from './domain/invitation-code.js';
+import {
+  canonicalInvitationCode,
+  digestInvitationCode,
+  generateInvitationCode,
+} from './domain/invitation-code.js';
 import {
   INVITATION_TTL_MS,
   MAX_LIVE_INVITATIONS_PER_MEMBER,
@@ -47,17 +54,44 @@ export interface IssuedGroupInvitation extends GroupInvitationSummary {
  * it, so this carries what someone needs to decide whether to accept — who
  * invited them, what the group is, what it costs — and nothing that would let
  * them profile the membership. No member list, no balances, no group id.
+ *
+ * `kind` says how the page was reached: through an invitation, or through the
+ * permanent public code of a group its administrator has listed. Only a listed
+ * group carries its `shortCode`, which is the address search engines index.
  */
 export interface PublicInvitationPreview {
+  readonly kind: 'invitation' | 'listed';
+  readonly shortCode: string | null;
   readonly groupName: string;
+  /** Only for a listed group; an invitation shows what the group is by name. */
+  readonly description: string | null;
   readonly inviterName: string;
   readonly contributionAmountMinor: string;
   readonly currency: string;
   readonly contributionFrequency: string;
   readonly memberCount: number;
   readonly maxMembers: number;
-  readonly expiresAt: string;
+  readonly startDate: string;
+  /** When the invitation stops working. A listed group's page has none. */
+  readonly expiresAt: string | null;
 }
+
+/** The fields of a group the public preview is built from. */
+const previewGroupSelect = {
+  name: true,
+  description: true,
+  status: true,
+  currency: true,
+  maxMembers: true,
+  baseContributionMinor: true,
+  contributionUnitMinor: true,
+  contributionFrequency: true,
+  startDate: true,
+  _count: { select: { members: { where: { status: AjoMemberStatus.ACTIVE } } } },
+} as const;
+
+const acceptsMembers = (status: AjoGroupStatus) =>
+  status === AjoGroupStatus.DRAFT || status === AjoGroupStatus.OPEN;
 
 @Injectable()
 export class GroupInvitationsService {
@@ -70,7 +104,7 @@ export class GroupInvitationsService {
     config: ConfigService<Environment, true>,
   ) {
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
-    this.webUrl = config.get('ADMIN_WEB_URL', { infer: true }).replace(/\/+$/, '');
+    this.webUrl = publicWebUrl(config.get('ADMIN_WEB_URL', { infer: true }));
   }
 
   /**
@@ -146,7 +180,7 @@ export class GroupInvitationsService {
     return {
       ...this.summarise(invitation, now),
       code,
-      url: `${this.webUrl}/join/${code}`,
+      url: `${this.webUrl}/g/${code}`,
     };
   }
 
@@ -210,53 +244,144 @@ export class GroupInvitationsService {
   }
 
   /**
-   * Describes an invitation to the public landing page.
+   * Describes a group to the public landing page at /g/<code>.
    *
-   * Unauthenticated by necessity: the whole point is that the recipient may not
-   * have an account, or even the app, yet. Every unusable invitation — missing,
-   * revoked, expired, spent — is reported identically, so a guessed code cannot
-   * be used to learn that a group exists.
+   * The code is either an invitation or, for a group its administrator has
+   * listed, the group's permanent public code. Unauthenticated by necessity:
+   * the whole point is that the recipient may not have an account, or even the
+   * app, yet. Every unusable code — unknown, revoked, expired, spent, or the
+   * public code of an unlisted group — is reported identically, so a guessed
+   * code cannot be used to learn that a group exists.
    */
   async preview(code: string): Promise<PublicInvitationPreview> {
-    const invitation = await this.prisma.groupInvitation.findUnique({
-      where: { tokenDigest: this.digest(code) },
-      include: {
-        group: {
-          select: {
-            name: true,
-            status: true,
-            currency: true,
-            maxMembers: true,
-            baseContributionMinor: true,
-            contributionUnitMinor: true,
-            contributionFrequency: true,
-            _count: { select: { members: { where: { status: AjoMemberStatus.ACTIVE } } } },
-          },
+    const listed = await this.findListedGroup(code);
+    if (listed) {
+      const admin = await this.prisma.ajoGroupMember.findFirst({
+        where: {
+          groupId: listed.id,
+          role: AjoMemberRole.GROUP_ADMIN,
+          status: AjoMemberStatus.ACTIVE,
         },
-        createdBy: { select: { userId: true } },
+        select: { userId: true },
+      });
+      return this.describe(listed, {
+        kind: 'listed',
+        shortCode: listed.shortCode,
+        inviterUserId: admin?.userId ?? null,
+        expiresAt: null,
+      });
+    }
+
+    const invitation = await this.findLiveInvitation(code);
+    return this.describe(invitation.group, {
+      kind: 'invitation',
+      shortCode: null,
+      inviterUserId: invitation.createdBy.userId,
+      expiresAt: invitation.expiresAt.toISOString(),
+    });
+  }
+
+  /**
+   * Resolves a link's code to the group it admits, for a signed-in caller.
+   *
+   * A link carries only a code — deliberately, since the public preview must
+   * not hand a group id to whoever holds a forwarded message. Once someone has
+   * an account, the app still needs that id to join, and asking them to type it
+   * from the invitation is exactly the friction the link exists to remove.
+   * Join is then called with the same code, which admits them either as an
+   * invitation or as the listed group's public code.
+   */
+  async resolveGroup(code: string): Promise<{ groupId: string; groupName: string }> {
+    const listed = await this.findListedGroup(code);
+    if (listed) return { groupId: listed.id, groupName: listed.name };
+
+    const invitation = await this.findLiveInvitation(code);
+    return { groupId: invitation.group.id, groupName: invitation.group.name };
+  }
+
+  /**
+   * A listed group that still accepts members, from its public code. Null for
+   * anything else, including the public code of an unlisted group, so the
+   * caller falls through to treating the code as an invitation and reports a
+   * miss exactly as it would for any wrong code.
+   */
+  private async findListedGroup(code: string) {
+    const shortCode = normalisePublicCode(code);
+    if (!shortCode) return null;
+    const group = await this.prisma.ajoGroup.findUnique({
+      where: { shortCode },
+      select: {
+        ...previewGroupSelect,
+        id: true,
+        shortCode: true,
+        publiclyListed: true,
+        deletedAt: true,
       },
     });
+    if (!group || !group.publiclyListed || group.deletedAt || !acceptsMembers(group.status)) {
+      return null;
+    }
+    return group;
+  }
+
+  private async findLiveInvitation(code: string) {
+    const canonical = canonicalInvitationCode(code);
+    const invitation = canonical
+      ? await this.prisma.groupInvitation.findUnique({
+          where: { tokenDigest: this.digest(canonical) },
+          include: {
+            group: { select: { ...previewGroupSelect, id: true } },
+            createdBy: { select: { userId: true } },
+          },
+        })
+      : null;
 
     const now = new Date();
     if (
       !invitation ||
       effectiveInvitationStatus({ ...invitation, now }) !== GroupInvitationStatus.ACTIVE ||
-      (invitation.group.status !== AjoGroupStatus.DRAFT &&
-        invitation.group.status !== AjoGroupStatus.OPEN)
+      !acceptsMembers(invitation.group.status)
     ) {
       throw new NotFoundException('This invitation is no longer valid');
     }
+    return invitation;
+  }
 
+  private async describe(
+    group: {
+      name: string;
+      description: string | null;
+      currency: string;
+      maxMembers: number;
+      baseContributionMinor: bigint;
+      contributionUnitMinor: bigint | null;
+      contributionFrequency: string;
+      startDate: Date;
+      _count: { members: number };
+    },
+    context: {
+      kind: PublicInvitationPreview['kind'];
+      shortCode: string | null;
+      inviterUserId: string | null;
+      expiresAt: string | null;
+    },
+  ): Promise<PublicInvitationPreview> {
     // AjoGroupMember carries no user relation, so the inviter's name is read
     // separately, as elsewhere in this module.
-    const inviter = await this.prisma.userProfile.findUnique({
-      where: { userId: invitation.createdBy.userId },
-      select: { firstName: true, lastName: true },
-    });
+    const inviter = context.inviterUserId
+      ? await this.prisma.userProfile.findUnique({
+          where: { userId: context.inviterUserId },
+          select: { firstName: true, lastName: true },
+        })
+      : null;
 
-    const group = invitation.group;
     return {
+      kind: context.kind,
+      shortCode: context.shortCode,
       groupName: group.name,
+      // An unlisted group's description is for its members; a listed group's
+      // is what its administrator chose to publish.
+      description: context.kind === 'listed' ? group.description : null,
       // A first name and an initial is enough to recognise someone you know
       // without handing a stranger a full name from a forwarded link.
       inviterName: inviter
@@ -269,35 +394,9 @@ export class GroupInvitationsService {
       contributionFrequency: group.contributionFrequency,
       memberCount: group._count.members,
       maxMembers: group.maxMembers,
-      expiresAt: invitation.expiresAt.toISOString(),
+      startDate: group.startDate.toISOString().slice(0, 10),
+      expiresAt: context.expiresAt,
     };
-  }
-
-  /**
-   * Resolves an invitation code to the group it admits, for a signed-in caller.
-   *
-   * A link carries only the code — deliberately, since the public preview must
-   * not hand a group id to whoever holds a forwarded message. Once someone has
-   * an account, the app still needs that id to join, and asking them to type it
-   * from the invitation is exactly the friction the link exists to remove.
-   */
-  async resolveGroup(code: string): Promise<{ groupId: string; groupName: string }> {
-    const invitation = await this.prisma.groupInvitation.findUnique({
-      where: { tokenDigest: this.digest(code) },
-      include: { group: { select: { id: true, name: true, status: true } } },
-    });
-
-    const now = new Date();
-    if (
-      !invitation ||
-      effectiveInvitationStatus({ ...invitation, now }) !== GroupInvitationStatus.ACTIVE ||
-      (invitation.group.status !== AjoGroupStatus.DRAFT &&
-        invitation.group.status !== AjoGroupStatus.OPEN)
-    ) {
-      throw new NotFoundException('This invitation is no longer valid');
-    }
-
-    return { groupId: invitation.group.id, groupName: invitation.group.name };
   }
 
   private summarise(

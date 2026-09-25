@@ -37,6 +37,11 @@ The join code is shown once, on creation, and only its SHA-256 digest is stored.
 Its alphabet excludes `O`, `I`, `L`, `0` and `1`, because these codes are read
 aloud and typed by hand.
 
+Every pool also has a permanent 7-character public code. An organiser who lists
+the pool (`publiclyListed` on update) publishes it at `ajocloud.com/p/<code>`,
+where search engines can find it and anyone can join without the join code. See
+[share-links.md](share-links.md).
+
 API — all routes require authentication, except the public preview at the end:
 
 - `POST /api/v1/akawo/pools` — create a `DRAFT` pool. The response is the only
@@ -46,10 +51,11 @@ API — all routes require authentication, except the public preview at the end:
   own due and the same pool totals the member's detail view returns
   (`memberCount`, `paidCount`, `collectedMinor`, `expectedMinor`, `progressBps`).
   Aggregates only: a member may see how many of the group have paid, never who.
-- `GET /api/v1/public/akawo-pools/:joinCode` — **public**, for the web page a
-  shared pool link lands on. The same description as the signed-in preview,
-  without the pool id, and only for an `OPEN` pool: a pool in any other state
-  reports exactly like an unknown code. Rate limited to 20 a minute.
+- `GET /api/v1/public/akawo-pools/:code` — **public**, for the web page a
+  shared pool link lands on (`ajocloud.com/p/<code>`). The same description as
+  the signed-in preview, without the pool id, and only for an `OPEN` pool: a
+  pool in any other state reports exactly like an unknown code. Takes the join
+  code, or the public code of a listed pool. Rate limited to 20 a minute.
 - `GET /api/v1/akawo/pools/preview?joinCode=` — name, amount and organiser for a
   code, so a joiner can confirm before committing. An unknown code and an
   unavailable pool report identically, so a guessed code reveals nothing.
