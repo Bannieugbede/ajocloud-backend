@@ -15,6 +15,11 @@ the coordinator lifecycle, procurement, and distribution tooling are implemented
   coordinated programmes.
 - `GET /api/v1/food-ajo/programmes/:programmeId` — guarded programme detail.
 - `GET /api/v1/food-ajo/programmes/subscriptions/mine` — the caller's own enrolments.
+- `GET /api/v1/public/food-programmes/:programmeId` — **public**, for the web page a shared
+  programme link lands on. Only `OPEN` and `ACTIVE` programmes, the ones a member can already
+  find in the app; anything else reports as not found. Returns the programme, its active packages
+  and the coordinator's name and verification badge. The coordinator's user id and the enrolment
+  count are withheld. Rate limited to 30 a minute.
 - `POST /api/v1/food-ajo/programmes/:programmeId/subscribe` — enrol in a package. Capacity counts
   portions rather than members, so a member raising their quantity cannot oversubscribe the
   programme. Only an `OPEN` programme accepts enrolment.

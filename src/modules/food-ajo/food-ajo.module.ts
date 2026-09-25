@@ -4,10 +4,15 @@ import { FoodAjoCoordinatorController } from './food-ajo-coordinator.controller.
 import { FoodAjoCoordinatorService } from './food-ajo-coordinator.service.js';
 import { FoodAjoProgrammesController } from './food-ajo-programmes.controller.js';
 import { FoodAjoProgrammesService } from './food-ajo-programmes.service.js';
+import { PublicFoodProgrammesController } from './public-food-programmes.controller.js';
 
 @Module({
   imports: [AuthModule],
-  controllers: [FoodAjoProgrammesController, FoodAjoCoordinatorController],
+  controllers: [
+    FoodAjoProgrammesController,
+    FoodAjoCoordinatorController,
+    PublicFoodProgrammesController,
+  ],
   providers: [FoodAjoProgrammesService, FoodAjoCoordinatorService],
 })
 export class FoodAjoModule {}

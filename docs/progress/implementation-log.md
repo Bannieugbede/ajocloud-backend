@@ -284,3 +284,14 @@
 - Tests: 815 backend across 69 suites (30 new: 11 money formatting, 6 payout notification, 6 wallet-funded, 7 KYC). Mutation testing confirmed four guards load-bearing: the retry guard on payouts, the non-blocking send, the net-versus-gross amount, and the settled-decisions-only guard on KYC.
 - Quality: lint at `--max-warnings 0`, strict typecheck and Prettier clean; all 17 migrations verified applying to an empty database. Build was not run, per the standing instruction in this session.
 - Remaining: a notification is fire-and-forget, so one lost to a transient failure is not retried — the outbox table exists and a worker consuming it would be the durable answer. Reminders need a scheduler. Food and Bill Payment templates still have no emitter.
+
+## Public share previews for Akawo pools and Food programmes (2026-09-25)
+
+- Ajo invitations had a public preview and a web landing page; an Akawo pool was shared as a bare code and a Food programme not at all, and both previews required a session. The website cannot describe either to someone without an account, so neither could have a landing page.
+- `GET /api/v1/public/akawo-pools/:joinCode` reuses the code lookup. It withholds the pool id (joining goes by code), answers only for an `OPEN` pool, and reports any other state exactly like an unknown code so a guessed code reveals nothing about closed pools. The code's shape is checked before any lookup.
+- `GET /api/v1/public/food-programmes/:programmeId` answers only for `OPEN` and `ACTIVE` programmes, the ones any member can already browse. The response is listed field by field rather than by deleting private fields, so something later added to the shared select is not published by accident. The coordinator's user id and the enrolment count are withheld.
+- Both are `@PublicEndpoint()` controllers separate from the guarded ones, rate limited like the Ajo invitation preview (20 and 30 a minute).
+- Files: `src/modules/akawo/public-akawo-pools.controller.ts`, `src/modules/akawo/akawo-pools.service.ts`, `src/modules/food-ajo/public-food-programmes.controller.ts`, `src/modules/food-ajo/food-ajo-programmes.service.ts`, the two module wirings, `docs/akawo.md`, `docs/food-ajo.md`.
+- Tests: 13 new (`public-akawo-pools.spec.ts`, `public-food-programmes.spec.ts`), covering hidden fields, non-joinable states and malformed codes.
+- Quality: lint, strict typecheck and Prettier clean. Build not run.
+

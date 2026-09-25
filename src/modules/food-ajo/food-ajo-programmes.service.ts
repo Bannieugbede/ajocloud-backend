@@ -166,6 +166,48 @@ export class FoodAjoProgrammesService {
   }
 
   /**
+   * Describes a programme to someone who is not signed in: the web page a
+   * shared programme link lands on.
+   *
+   * Only programmes a member could already find in the app are described:
+   * OPEN and ACTIVE. A draft, or one that has finished, reports exactly like an
+   * id that does not exist. The coordinator's user id and the enrolment count
+   * are withheld; the name and verification badge are what a member browsing
+   * in the app sees.
+   */
+  async publicPreview(programmeId: string): Promise<unknown> {
+    const programme = await this.prisma.foodAjoGroup.findUnique({
+      where: { id: programmeId },
+      select: programmeSelect,
+    });
+    if (
+      !programme ||
+      (programme.status !== FoodAjoStatus.OPEN && programme.status !== FoodAjoStatus.ACTIVE)
+    ) {
+      throw new NotFoundException('Food Ajo programme was not found');
+    }
+    const [described] = await this.withCoordinators([programme]);
+    if (!described) throw new NotFoundException('Food Ajo programme was not found');
+    // Listed field by field rather than by removing the private ones, so a
+    // field later added to the select is not published here by accident.
+    return this.serialize({
+      id: described.id,
+      name: described.name,
+      status: described.status,
+      currency: described.currency,
+      contributionMinor: described.contributionMinor,
+      contributionFrequency: described.contributionFrequency,
+      fulfilmentMethod: described.fulfilmentMethod,
+      startsAt: described.startsAt,
+      endsAt: described.endsAt,
+      distributionAt: described.distributionAt,
+      packages: described.packages,
+      coordinatorName: described.coordinatorName,
+      coordinatorVerified: described.coordinatorVerified,
+    });
+  }
+
+  /**
    * Enrols the caller in one of a programme's packages.
    *
    * Runs serializable because capacity is checked and consumed in the same

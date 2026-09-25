@@ -37,7 +37,7 @@ The join code is shown once, on creation, and only its SHA-256 digest is stored.
 Its alphabet excludes `O`, `I`, `L`, `0` and `1`, because these codes are read
 aloud and typed by hand.
 
-API — all routes require authentication:
+API — all routes require authentication, except the public preview at the end:
 
 - `POST /api/v1/akawo/pools` — create a `DRAFT` pool. The response is the only
   time the plaintext `joinCode` exists.
@@ -46,6 +46,10 @@ API — all routes require authentication:
   own due and the same pool totals the member's detail view returns
   (`memberCount`, `paidCount`, `collectedMinor`, `expectedMinor`, `progressBps`).
   Aggregates only: a member may see how many of the group have paid, never who.
+- `GET /api/v1/public/akawo-pools/:joinCode` — **public**, for the web page a
+  shared pool link lands on. The same description as the signed-in preview,
+  without the pool id, and only for an `OPEN` pool: a pool in any other state
+  reports exactly like an unknown code. Rate limited to 20 a minute.
 - `GET /api/v1/akawo/pools/preview?joinCode=` — name, amount and organiser for a
   code, so a joiner can confirm before committing. An unknown code and an
   unavailable pool report identically, so a guessed code reveals nothing.

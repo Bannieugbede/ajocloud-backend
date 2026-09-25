@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Public previews for shared Akawo pools and Food programmes.**
+  `GET /api/v1/public/akawo-pools/:joinCode` and
+  `GET /api/v1/public/food-programmes/:programmeId` describe a pool or programme
+  to someone with no session, so the website can give a shared link a landing
+  page, as it already does for Ajo invitations. Both answer only for what a
+  member could already join (an `OPEN` pool; an `OPEN` or `ACTIVE`
+  programme), report everything else as not found, withhold internal ids, and
+  are rate limited.
+
+### Added
+
 - **Notifications now actually arrive.** The delivery path, preferences,
   templates and inbox all worked, but nothing called `notify` — so the inbox was
   empty in practice. Three product events emit now: an Ajo payout sent, a wallet

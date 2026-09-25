@@ -274,6 +274,33 @@ export class AkawoPoolsService {
   }
 
   /**
+   * Describes a pool to someone who is not signed in: the web page a shared
+   * pool link lands on.
+   *
+   * Narrower than `preview`. The pool id is withheld, because joining goes by
+   * code and nothing a stranger holds should address the pool directly. A pool
+   * that has stopped accepting members reports exactly like an unknown code,
+   * so a guessed code reveals nothing about pools that exist but are closed.
+   */
+  async publicPreview(joinCode: string): Promise<unknown> {
+    const pool = await this.findByJoinCode(joinCode);
+    if (!acceptsMembers(pool.status)) {
+      throw new NotFoundException('That join code was not recognised');
+    }
+    return this.serialize({
+      name: pool.name,
+      purpose: pool.purpose,
+      amountMinor: pool.amountMinor,
+      currency: pool.currency,
+      referenceLabel: pool.referenceLabel,
+      dueAt: pool.dueAt,
+      organiserName: pool.organiser.profile
+        ? `${pool.organiser.profile.firstName} ${pool.organiser.profile.lastName}`
+        : 'Pool organiser',
+    });
+  }
+
+  /**
    * Joins a pool and creates the member's due in the same transaction, so a
    * membership can never exist without the obligation it implies.
    */
