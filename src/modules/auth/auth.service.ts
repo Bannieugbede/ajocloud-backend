@@ -89,8 +89,7 @@ export class AuthService {
     this.accessTtlSeconds = parseDurationSeconds(this.accessTtl);
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
     this.refreshTtlSeconds = config.get('JWT_REFRESH_TTL_SECONDS', { infer: true });
-    this.refreshReuseGraceMs =
-      config.get('REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1_000;
+    this.refreshReuseGraceMs = config.get('REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1_000;
   }
 
   async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
