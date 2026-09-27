@@ -1,3 +1,7 @@
+## No builds unless asked
+
+Do not run any build unless the user explicitly asks for one in the current request. This covers `npm run build`, `nest build`, `next build`, `expo prebuild`, `eas build`, `expo run:ios` / `expo run:android`, `xcodebuild`, `gradlew assemble*`, `pod install`, Docker image builds, and any script that produces build artifacts. Type checks (`tsc --noEmit`), lint, and tests are fine. If a build would help verify a change, say so and ask instead of running it.
+
 # Codex working agreement
 
 ## Before work

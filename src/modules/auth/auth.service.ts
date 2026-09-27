@@ -23,7 +23,10 @@ import {
 import type { Environment } from '../../config/env.schema.js';
 import type { AccountVerificationChallenge } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
-import { TransactionService } from '../../infrastructure/database/transaction.service.js';
+import {
+  TransactionService,
+  type TransactionClient,
+} from '../../infrastructure/database/transaction.service.js';
 import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import { generateReferralCode, normaliseReferralCode } from '../referrals/domain/referral-code.js';
 import type { LoginDto } from './dto/login.dto.js';
@@ -70,6 +73,7 @@ export class AuthService {
   private readonly accessTtl: string;
   private readonly tokenPepper: string;
   private readonly refreshTtlSeconds: number;
+  private readonly refreshReuseGraceMs: number;
   private readonly accessTtlSeconds: number;
 
   constructor(
@@ -85,6 +89,8 @@ export class AuthService {
     this.accessTtlSeconds = parseDurationSeconds(this.accessTtl);
     this.tokenPepper = config.get('TOKEN_PEPPER', { infer: true });
     this.refreshTtlSeconds = config.get('JWT_REFRESH_TTL_SECONDS', { infer: true });
+    this.refreshReuseGraceMs =
+      config.get('REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1_000;
   }
 
   async register(dto: RegisterDto, context: ClientContext): Promise<VerificationChallengeResult> {
@@ -349,7 +355,21 @@ export class AuthService {
       });
       if (!token || token.revokedAt || token.expiresAt <= new Date())
         return { kind: 'invalid' } as const;
-      if (token.consumedAt || token.session.currentTokenHash !== tokenHash) {
+      // A token presented again straight after rotating, whose replacement has
+      // never been used, is a client that never received the rotation response:
+      // the connection dropped or the app reloaded while the request was in the
+      // air. Rotating again from it (and retiring the undelivered replacement)
+      // keeps one valid chain instead of revoking a session nobody stole.
+      const retry =
+        token.consumedAt && token.replacedById
+          ? await this.undeliveredReplacement(tx, token, token.session.currentTokenHash)
+          : null;
+      if (retry) {
+        await tx.refreshToken.update({
+          where: { id: retry.id },
+          data: { revokedAt: new Date() },
+        });
+      } else if (token.consumedAt || token.session.currentTokenHash !== tokenHash) {
         await tx.session.update({
           where: { id: token.sessionId },
           data: {
@@ -374,7 +394,7 @@ export class AuthService {
       });
       await tx.refreshToken.update({
         where: { id: token.id },
-        data: { consumedAt: new Date(), replacedById: replacement.id },
+        data: { consumedAt: token.consumedAt ?? new Date(), replacedById: replacement.id },
       });
       await tx.session.update({
         where: { id: token.sessionId },
@@ -394,6 +414,29 @@ export class AuthService {
       expiresIn: this.accessTtl,
       accessTokenExpiresAt: new Date(Date.now() + this.accessTtlSeconds * 1_000).toISOString(),
     };
+  }
+
+  /**
+   * The replacement a consumed token was rotated into, when that rotation looks
+   * undelivered: it happened within the grace window, the replacement is still
+   * the session's current token, and it has never been presented itself.
+   */
+  private async undeliveredReplacement(
+    tx: TransactionClient,
+    token: { consumedAt: Date | null; replacedById: string | null },
+    currentTokenHash: string | null,
+  ): Promise<{ id: string } | null> {
+    if (!token.consumedAt || !token.replacedById) return null;
+    if (Date.now() - token.consumedAt.getTime() > this.refreshReuseGraceMs) return null;
+    const replacement = await tx.refreshToken.findUnique({ where: { id: token.replacedById } });
+    if (
+      !replacement ||
+      replacement.consumedAt ||
+      replacement.revokedAt ||
+      replacement.tokenHash !== currentTokenHash
+    )
+      return null;
+    return { id: replacement.id };
   }
 
   async logout(sessionId: string): Promise<void> {

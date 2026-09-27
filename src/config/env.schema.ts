@@ -42,6 +42,11 @@ export const environmentSchema = z
       .default('15m'),
     TOKEN_PEPPER: z.string().min(32),
     JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
+    // How long a just-rotated refresh token may be presented again when the
+    // token that replaced it has never been used. Covers a rotation whose
+    // response never reached the client (dropped connection, app reloaded
+    // mid-request), which would otherwise be read as theft and end the session.
+    REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(300),
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(86_400),
     PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
     BILL_PAYMENT_PROVIDER: z.enum(['mock', 'monnify']).default('mock'),
