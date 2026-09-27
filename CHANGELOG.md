@@ -4,6 +4,16 @@
 
 ### Added
 
+- **The Nigerian bill catalogue.** Airtime (MTN, Airtel, Glo, 9mobile),
+  Internet (the four networks' data plans, Smile, Spectranet), Electricity (all
+  twelve DisCos, prepaid and postpaid) and Cable TV (DStv, GOtv, StarTimes) are
+  defined once and served by the development provider. Billers return
+  `referenceKind` and `referenceLabel`; packages return `validity`; payment
+  history returns the package. References are normalised per kind and a
+  malformed one is refused with a specific message. Water is retired, and a
+  catalogue revision change now refreshes the stored copy immediately. No
+  migration: the new fields live in the existing `catalogData` columns.
+
 - **Every product pays through one contract.** Ajo contributions and Food
   enrolments are now payment-intent targets alongside Akawo dues and wallet
   top-ups, each implemented as a `PaymentTarget` in the module that owns it

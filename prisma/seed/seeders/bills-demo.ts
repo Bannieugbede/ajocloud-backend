@@ -1,14 +1,16 @@
 import { createHmac } from 'node:crypto';
 import type { PrismaClient } from '../../../generated/prisma/client.js';
-import {
-  BillCatalogStatus,
-  BillPaymentStatus,
-  ReconciliationState,
-} from '../../../generated/prisma/enums.js';
+import { BillPaymentStatus, ReconciliationState } from '../../../generated/prisma/enums.js';
+import { syncBillCatalog } from '../../../src/modules/bill-payments/bill-catalog-sync.js';
+import { MockBillPaymentProvider } from '../../../src/modules/bill-payments/providers/mock-bill-payment.provider.js';
 import { demoUser, type DemoUsers } from './demo-members.js';
 
 /**
  * The bill catalogue and a history of paid bills.
+ *
+ * The catalogue is written by the same sync the service refreshes with, from
+ * the development provider, so the seeded billers are exactly the ones the API
+ * would list and there is one Nigerian catalogue to maintain, not two.
  *
  * The history matters as much as the catalogue: Home's Quick Pay is derived
  * from past payments, so without these the section renders empty however many
@@ -37,153 +39,12 @@ function maskOf(reference: string): string {
     : `${'*'.repeat(reference.length - 4)}${reference.slice(-4)}`;
 }
 
-type BillerPlan = {
-  readonly id: string;
-  readonly code: string;
-  readonly name: string;
-  readonly products: readonly {
-    id: string;
-    code: string;
-    name: string;
-    minimumMinor?: bigint;
-    fixedAmountMinor?: bigint;
-  }[];
-};
-
-type CategoryPlan = {
-  readonly id: string;
-  readonly code: string;
-  readonly name: string;
-  readonly billers: readonly BillerPlan[];
-};
-
-/** Names match the shortcuts on Home, so a tapped shortcut finds its category. */
-const CATEGORIES: readonly CategoryPlan[] = [
-  {
-    id: '40000000-0000-4000-8000-000000000501',
-    code: 'ELECTRICITY',
-    name: 'Electricity',
-    billers: [
-      {
-        id: '40000000-0000-4000-8000-000000000511',
-        code: 'EKEDC',
-        name: 'EKEDC',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000521',
-            code: 'EKEDC-PREPAID',
-            name: 'Prepaid meter',
-            minimumMinor: 1_000_00n,
-          },
-          {
-            id: '40000000-0000-4000-8000-000000000522',
-            code: 'EKEDC-POSTPAID',
-            name: 'Postpaid account',
-            minimumMinor: 1_000_00n,
-          },
-        ],
-      },
-      {
-        id: '40000000-0000-4000-8000-000000000512',
-        code: 'IKEDC',
-        name: 'IKEDC',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000523',
-            code: 'IKEDC-PREPAID',
-            name: 'Prepaid meter',
-            minimumMinor: 1_000_00n,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: '40000000-0000-4000-8000-000000000502',
-    code: 'WATER',
-    name: 'Water',
-    billers: [
-      {
-        id: '40000000-0000-4000-8000-000000000513',
-        code: 'LWC',
-        name: 'Lagos Water Corporation',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000524',
-            code: 'LWC-STANDARD',
-            name: 'Water bill',
-            minimumMinor: 500_00n,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: '40000000-0000-4000-8000-000000000503',
-    code: 'CABLE_TV',
-    name: 'Cable TV',
-    billers: [
-      {
-        id: '40000000-0000-4000-8000-000000000514',
-        code: 'DSTV',
-        name: 'DSTV',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000525',
-            code: 'DSTV-COMPACT',
-            name: 'Compact',
-            fixedAmountMinor: 19_000_00n,
-          },
-          {
-            id: '40000000-0000-4000-8000-000000000526',
-            code: 'DSTV-COMPACT-PLUS',
-            name: 'Compact Plus',
-            fixedAmountMinor: 24_500_00n,
-          },
-        ],
-      },
-      {
-        id: '40000000-0000-4000-8000-000000000515',
-        code: 'GOTV',
-        name: 'GOtv',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000527',
-            code: 'GOTV-MAX',
-            name: 'Max',
-            fixedAmountMinor: 8_500_00n,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: '40000000-0000-4000-8000-000000000504',
-    code: 'INTERNET',
-    name: 'Internet',
-    billers: [
-      {
-        id: '40000000-0000-4000-8000-000000000516',
-        code: 'SPECTRANET',
-        name: 'Spectranet',
-        products: [
-          {
-            id: '40000000-0000-4000-8000-000000000528',
-            code: 'SPECTRANET-UNLIMITED',
-            name: 'Unlimited monthly',
-            fixedAmountMinor: 18_000_00n,
-          },
-        ],
-      },
-    ],
-  },
-];
-
 type PaymentPlan = {
   readonly id: string;
   readonly userKey: string;
-  readonly billerId: string;
-  readonly productId: string;
+  readonly categoryCode: string;
+  readonly billerCode: string;
+  readonly productCode: string;
   readonly reference: string;
   readonly customerName: string;
   readonly amountMinor: bigint;
@@ -196,9 +57,10 @@ const PAYMENTS: readonly PaymentPlan[] = [
   {
     id: '40000000-0000-4000-8000-000000000601',
     userKey: 'chisom',
-    billerId: '40000000-0000-4000-8000-000000000514',
-    productId: '40000000-0000-4000-8000-000000000526',
-    reference: '20147841',
+    categoryCode: 'CABLE_TV',
+    billerCode: 'DSTV',
+    productCode: 'DSTV-COMPACT-PLUS',
+    reference: '7020147841',
     customerName: 'C OKAFOR',
     amountMinor: 24_500_00n,
     status: BillPaymentStatus.SUCCESSFUL,
@@ -207,9 +69,10 @@ const PAYMENTS: readonly PaymentPlan[] = [
   {
     id: '40000000-0000-4000-8000-000000000602',
     userKey: 'chisom',
-    billerId: '40000000-0000-4000-8000-000000000511',
-    productId: '40000000-0000-4000-8000-000000000521',
-    reference: '45012293',
+    categoryCode: 'ELECTRICITY',
+    billerCode: 'EKEDC',
+    productCode: 'EKEDC-PREPAID',
+    reference: '450123412293',
     customerName: 'C OKAFOR',
     amountMinor: 15_000_00n,
     status: BillPaymentStatus.SUCCESSFUL,
@@ -220,9 +83,10 @@ const PAYMENTS: readonly PaymentPlan[] = [
   {
     id: '40000000-0000-4000-8000-000000000603',
     userKey: 'chisom',
-    billerId: '40000000-0000-4000-8000-000000000514',
-    productId: '40000000-0000-4000-8000-000000000526',
-    reference: '20147841',
+    categoryCode: 'CABLE_TV',
+    billerCode: 'DSTV',
+    productCode: 'DSTV-COMPACT-PLUS',
+    reference: '7020147841',
     customerName: 'C OKAFOR',
     amountMinor: 24_500_00n,
     status: BillPaymentStatus.SUCCESSFUL,
@@ -233,9 +97,10 @@ const PAYMENTS: readonly PaymentPlan[] = [
   {
     id: '40000000-0000-4000-8000-000000000604',
     userKey: 'chisom',
-    billerId: '40000000-0000-4000-8000-000000000516',
-    productId: '40000000-0000-4000-8000-000000000528',
-    reference: '77channel01',
+    categoryCode: 'INTERNET',
+    billerCode: 'SPECTRANET',
+    productCode: 'SPECTRANET-UNLIMITED',
+    reference: 'SPN77CHANNEL01',
     customerName: 'C OKAFOR',
     amountMinor: 18_000_00n,
     status: BillPaymentStatus.FAILED,
@@ -244,9 +109,10 @@ const PAYMENTS: readonly PaymentPlan[] = [
   {
     id: '40000000-0000-4000-8000-000000000605',
     userKey: 'amaka',
-    billerId: '40000000-0000-4000-8000-000000000512',
-    productId: '40000000-0000-4000-8000-000000000523',
-    reference: '45019987',
+    categoryCode: 'ELECTRICITY',
+    billerCode: 'IKEDC',
+    productCode: 'IKEDC-PREPAID',
+    reference: '450198779987',
     customerName: 'A OBIORA',
     amountMinor: 10_000_00n,
     status: BillPaymentStatus.SUCCESSFUL,
@@ -260,56 +126,7 @@ export async function seedBillsDemo(prisma: PrismaClient, users: DemoUsers): Pro
   // a far-future expiry keeps the demo from refetching against a mock.
   const expiresAt = daysFromNow(90);
 
-  for (const category of CATEGORIES) {
-    await prisma.billCategory.upsert({
-      where: { provider_providerCode: { provider: 'mock', providerCode: category.code } },
-      update: { name: category.name, refreshedAt, expiresAt },
-      create: {
-        id: category.id,
-        provider: 'mock',
-        providerCode: category.code,
-        name: category.name,
-        status: BillCatalogStatus.ACTIVE,
-        refreshedAt,
-        expiresAt,
-      },
-    });
-
-    for (const biller of category.billers) {
-      await prisma.billBiller.upsert({
-        where: { categoryId_providerCode: { categoryId: category.id, providerCode: biller.code } },
-        update: { name: biller.name, refreshedAt, expiresAt },
-        create: {
-          id: biller.id,
-          categoryId: category.id,
-          providerCode: biller.code,
-          name: biller.name,
-          status: BillCatalogStatus.ACTIVE,
-          refreshedAt,
-          expiresAt,
-        },
-      });
-
-      for (const product of biller.products) {
-        await prisma.billProduct.upsert({
-          where: { billerId_providerCode: { billerId: biller.id, providerCode: product.code } },
-          update: { name: product.name },
-          create: {
-            id: product.id,
-            billerId: biller.id,
-            providerCode: product.code,
-            name: product.name,
-            status: BillCatalogStatus.ACTIVE,
-            currency: 'NGN',
-            ...(product.minimumMinor === undefined ? {} : { minimumMinor: product.minimumMinor }),
-            ...(product.fixedAmountMinor === undefined
-              ? {}
-              : { fixedAmountMinor: product.fixedAmountMinor }),
-          },
-        });
-      }
-    }
-  }
+  await syncBillCatalog(prisma, new MockBillPaymentProvider(), expiresAt, refreshedAt);
 
   for (const payment of PAYMENTS) {
     const userId = demoUser(users, payment.userKey);
@@ -318,6 +135,18 @@ export async function seedBillsDemo(prisma: PrismaClient, users: DemoUsers): Pro
       select: { id: true },
     });
     if (!wallet) continue;
+    const product = await prisma.billProduct.findFirst({
+      where: {
+        providerCode: payment.productCode,
+        biller: {
+          providerCode: payment.billerCode,
+          category: { provider: 'mock', providerCode: payment.categoryCode },
+        },
+      },
+      select: { id: true, billerId: true },
+    });
+    if (!product)
+      throw new Error(`Seed bill product ${payment.productCode} is not in the catalogue`);
 
     const settled = payment.status === BillPaymentStatus.SUCCESSFUL;
     const createdAt = daysFromNow(-payment.daysAgo);
@@ -334,8 +163,8 @@ export async function seedBillsDemo(prisma: PrismaClient, users: DemoUsers): Pro
         requestHash: digestOf(payment.id),
         userId,
         walletId: wallet.id,
-        billerId: payment.billerId,
-        productId: payment.productId,
+        billerId: product.billerId,
+        productId: product.id,
         customerReferenceDigest: digestOf(payment.reference),
         customerReferenceMasked: maskOf(payment.reference),
         verifiedCustomerName: payment.customerName,

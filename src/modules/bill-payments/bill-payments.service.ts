@@ -24,6 +24,14 @@ import { LedgerService } from '../ledger/ledger.service.js';
 import { assessVersionedFee } from '../fees/domain/fee-rule.js';
 import type { CreateBillPaymentDto } from './dto/create-bill-payment.dto.js';
 import type { ValidateBillCustomerDto } from './dto/validate-bill-customer.dto.js';
+import { syncBillCatalog } from './bill-catalog-sync.js';
+import {
+  BILL_REFERENCE_KINDS,
+  billReferenceProblem,
+  defaultReferenceLabel,
+  normaliseBillReference,
+  type BillReferenceKind,
+} from './domain/bill-reference.js';
 import {
   BILL_PAYMENT_PROVIDER,
   type BillPaymentProvider,
@@ -44,23 +52,37 @@ export class BillPaymentsService {
     this.referencePepper = config.get('TOKEN_PEPPER', { infer: true });
   }
 
+  /** Categories in the order the provider lists them, which is the order shown. */
   async categories(): Promise<unknown[]> {
     await this.refreshCatalogIfNeeded();
-    return this.prisma.billCategory.findMany({
+    const categories = await this.prisma.billCategory.findMany({
       where: { provider: this.provider.name, status: 'ACTIVE' },
-      select: { id: true, providerCode: true, name: true, expiresAt: true },
+      select: { id: true, providerCode: true, name: true, expiresAt: true, catalogData: true },
       orderBy: { name: 'asc' },
     });
+    return categories
+      .sort((left, right) => positionOf(left.catalogData) - positionOf(right.catalogData))
+      .map(({ id, providerCode, name, expiresAt }) => ({ id, providerCode, name, expiresAt }));
   }
 
+  /**
+   * A category's billers with their active packages. Each biller says what it
+   * identifies a customer by, so the app can label and shape the field without
+   * guessing from the category's name.
+   */
   async billers(categoryId: string): Promise<unknown[]> {
     await this.refreshCatalogIfNeeded();
-    return this.prisma.billBiller.findMany({
-      where: { categoryId, category: { provider: this.provider.name }, status: 'ACTIVE' },
+    const billers = await this.prisma.billBiller.findMany({
+      where: {
+        categoryId,
+        category: { provider: this.provider.name, status: 'ACTIVE' },
+        status: 'ACTIVE',
+      },
       select: {
         id: true,
         providerCode: true,
         name: true,
+        catalogData: true,
         products: {
           where: { status: 'ACTIVE' },
           select: {
@@ -71,26 +93,52 @@ export class BillPaymentsService {
             maximumMinor: true,
             fixedAmountMinor: true,
             currency: true,
+            catalogData: true,
           },
+          orderBy: [{ fixedAmountMinor: 'asc' }, { name: 'asc' }],
         },
       },
       orderBy: { name: 'asc' },
+    });
+    return billers.map(({ catalogData, products, ...biller }) => {
+      const reference = referenceOf(catalogData);
+      return {
+        ...biller,
+        referenceKind: reference.kind,
+        referenceLabel: reference.label,
+        products: products.map(({ catalogData: productData, ...product }) => ({
+          ...product,
+          validity: validityOf(productData),
+        })),
+      };
     });
   }
 
   async validateCustomer(userId: string, dto: ValidateBillCustomerDto): Promise<unknown> {
     const biller = await this.prisma.billBiller.findFirst({
-      where: { id: dto.billerId, category: { provider: this.provider.name }, status: 'ACTIVE' },
-      include: { products: dto.productId ? { where: { id: dto.productId } } : false },
+      where: {
+        id: dto.billerId,
+        category: { provider: this.provider.name, status: 'ACTIVE' },
+        status: 'ACTIVE',
+      },
+      include: {
+        products: dto.productId ? { where: { id: dto.productId, status: 'ACTIVE' } } : false,
+      },
     });
     if (!biller) throw new NotFoundException('Biller was not found');
     if (dto.productId && biller.products.length !== 1) {
       throw new NotFoundException('Biller product was not found');
     }
+    const reference = referenceOf(biller.catalogData);
+    const customerReference = this.normaliseReference(reference.kind, dto.customerReference);
+    // Caught here rather than by the provider: a phone number one digit short
+    // is the payer's typo, and the fix belongs in the message they see.
+    const problem = reference.kind ? billReferenceProblem(reference.kind, customerReference) : null;
+    if (problem) throw new UnprocessableEntityException(problem);
     const result = await this.provider.validateCustomer({
       billerCode: biller.providerCode,
       ...(biller.products[0] ? { productCode: biller.products[0].providerCode } : {}),
-      customerReference: dto.customerReference,
+      customerReference,
     });
     const validation = await this.prisma.billCustomerValidation.create({
       data: {
@@ -99,8 +147,8 @@ export class BillPaymentsService {
         ...(dto.productId ? { productId: dto.productId } : {}),
         provider: this.provider.name,
         ...(result.providerReference ? { providerReference: result.providerReference } : {}),
-        customerReferenceDigest: this.digest(dto.customerReference),
-        customerReferenceMasked: this.mask(dto.customerReference),
+        customerReferenceDigest: this.digest(customerReference),
+        customerReferenceMasked: this.mask(customerReference),
         ...(result.customerName ? { verifiedCustomerName: result.customerName } : {}),
         resultSummary: { resultCode: result.resultCode },
         valid: result.valid,
@@ -114,7 +162,11 @@ export class BillPaymentsService {
         expiresAt: true,
       },
     });
-    if (!result.valid) throw new UnprocessableEntityException('Customer reference is invalid');
+    if (!result.valid) {
+      throw new UnprocessableEntityException(
+        `${biller.name} did not recognise this ${reference.label.toLowerCase()}. Check it and try again.`,
+      );
+    }
     return validation;
   }
 
@@ -124,13 +176,25 @@ export class BillPaymentsService {
     dto: CreateBillPaymentDto,
   ): Promise<unknown> {
     const amountMinor = BigInt(dto.amountMinor);
-    const requestHash = this.digest(
-      JSON.stringify({ ...dto, customerReference: this.digest(dto.customerReference) }),
-    );
     const validation = await this.prisma.billCustomerValidation.findFirst({
       where: { id: dto.validationId, userId, valid: true, expiresAt: { gt: new Date() } },
     });
-    if (!validation || validation.customerReferenceDigest !== this.digest(dto.customerReference)) {
+    const validatedBiller = validation
+      ? await this.prisma.billBiller.findUnique({
+          where: { id: validation.billerId },
+          select: { catalogData: true },
+        })
+      : null;
+    // Normalised exactly as validation normalised it, so "0803 123 4567" and
+    // "08031234567" are one reference rather than a mismatch.
+    const customerReference = this.normaliseReference(
+      referenceOf(validatedBiller?.catalogData).kind,
+      dto.customerReference,
+    );
+    const requestHash = this.digest(
+      JSON.stringify({ ...dto, customerReference: this.digest(customerReference) }),
+    );
+    if (!validation || validation.customerReferenceDigest !== this.digest(customerReference)) {
       throw new UnprocessableEntityException('A current matching customer validation is required');
     }
     const prepared = await this.transactions.serializable(async (tx) => {
@@ -241,7 +305,7 @@ export class BillPaymentsService {
         internalReference: prepared.payment.internalReference,
         billerCode: biller.providerCode,
         ...(product ? { productCode: product.providerCode } : {}),
-        customerReference: dto.customerReference,
+        customerReference,
         amountMinor: prepared.payment.amountMinor,
         currency: prepared.payment.currency,
       });
@@ -513,70 +577,25 @@ export class BillPaymentsService {
     });
   }
 
+  /**
+   * Refreshes the stored catalogue when it has expired or when the provider now
+   * serves a different revision of it, so a catalogue change (a retired
+   * category, a repriced package) reaches members without waiting out the
+   * expiry.
+   */
   private async refreshCatalogIfNeeded(): Promise<void> {
+    const revision = this.provider.catalogRevision;
     const current = await this.prisma.billCategory.findFirst({
-      where: { provider: this.provider.name, expiresAt: { gt: new Date() } },
+      where: {
+        provider: this.provider.name,
+        status: 'ACTIVE',
+        expiresAt: { gt: new Date() },
+        ...(revision ? { catalogData: { path: ['revision'], equals: revision } } : {}),
+      },
       select: { id: true },
     });
     if (current) return;
-    const categories = await this.provider.listCategories();
-    const expiresAt = new Date(Date.now() + 6 * 60 * 60_000);
-    for (const category of categories) {
-      const stored = await this.prisma.billCategory.upsert({
-        where: {
-          provider_providerCode: { provider: this.provider.name, providerCode: category.code },
-        },
-        create: {
-          provider: this.provider.name,
-          providerCode: category.code,
-          name: category.name,
-          refreshedAt: new Date(),
-          expiresAt,
-        },
-        update: { name: category.name, status: 'ACTIVE', refreshedAt: new Date(), expiresAt },
-      });
-      const billers = await this.provider.listBillers(category.code);
-      for (const biller of billers) {
-        const storedBiller = await this.prisma.billBiller.upsert({
-          where: { categoryId_providerCode: { categoryId: stored.id, providerCode: biller.code } },
-          create: {
-            categoryId: stored.id,
-            providerCode: biller.code,
-            name: biller.name,
-            refreshedAt: new Date(),
-            expiresAt,
-          },
-          update: { name: biller.name, status: 'ACTIVE', refreshedAt: new Date(), expiresAt },
-        });
-        for (const product of biller.products) {
-          await this.prisma.billProduct.upsert({
-            where: {
-              billerId_providerCode: { billerId: storedBiller.id, providerCode: product.code },
-            },
-            create: {
-              billerId: storedBiller.id,
-              providerCode: product.code,
-              name: product.name,
-              currency: product.currency,
-              ...(product.minimumMinor !== undefined ? { minimumMinor: product.minimumMinor } : {}),
-              ...(product.maximumMinor !== undefined ? { maximumMinor: product.maximumMinor } : {}),
-              ...(product.fixedAmountMinor !== undefined
-                ? { fixedAmountMinor: product.fixedAmountMinor }
-                : {}),
-            },
-            update: {
-              name: product.name,
-              status: 'ACTIVE',
-              ...(product.minimumMinor !== undefined ? { minimumMinor: product.minimumMinor } : {}),
-              ...(product.maximumMinor !== undefined ? { maximumMinor: product.maximumMinor } : {}),
-              ...(product.fixedAmountMinor !== undefined
-                ? { fixedAmountMinor: product.fixedAmountMinor }
-                : {}),
-            },
-          });
-        }
-      }
-    }
+    await syncBillCatalog(this.prisma, this.provider, new Date(Date.now() + 6 * 60 * 60_000));
   }
 
   private async accounts(tx: TransactionClient, walletId: string, currency: string) {
@@ -699,6 +718,7 @@ export class BillPaymentsService {
       biller: {
         select: { id: true, name: true, category: { select: { id: true, name: true } } },
       },
+      product: { select: { id: true, name: true } },
       receipt: { select: { receiptNumber: true, issuedAt: true } },
     } as const;
   }
@@ -712,6 +732,10 @@ export class BillPaymentsService {
     return copy;
   }
 
+  private normaliseReference(kind: BillReferenceKind | null, raw: string): string {
+    return kind ? normaliseBillReference(kind, raw) : raw.trim();
+  }
+
   private digest(value: string): string {
     return createHmac('sha256', this.referencePepper).update(value).digest('hex');
   }
@@ -721,4 +745,36 @@ export class BillPaymentsService {
       ? '*'.repeat(value.length)
       : `${'*'.repeat(value.length - 4)}${value.slice(-4)}`;
   }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function positionOf(catalogData: unknown): number {
+  const position = record(catalogData).position;
+  return typeof position === 'number' ? position : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * What a stored biller identifies its customer by. Rows written before billers
+ * carried this have no kind, and are validated by the provider alone.
+ */
+function referenceOf(catalogData: unknown): { kind: BillReferenceKind | null; label: string } {
+  const data = record(catalogData);
+  const kind = BILL_REFERENCE_KINDS.find((candidate) => candidate === data.referenceKind) ?? null;
+  const label =
+    typeof data.referenceLabel === 'string'
+      ? data.referenceLabel
+      : kind
+        ? defaultReferenceLabel(kind)
+        : 'Customer reference';
+  return { kind, label };
+}
+
+function validityOf(catalogData: unknown): string | null {
+  const validity = record(catalogData).validity;
+  return typeof validity === 'string' ? validity : null;
 }

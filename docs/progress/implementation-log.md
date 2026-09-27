@@ -1,5 +1,22 @@
 # Implementation log
 
+## 2026-09-27 — Nigerian bill catalogue
+
+- Defined the catalogue once in `domain/nigeria-bill-catalog.ts`: Airtime (4
+  networks), Internet (4 networks' data plans, Smile, Spectranet), Electricity
+  (12 DisCos, prepaid/postpaid) and Cable TV (DStv, GOtv, StarTimes). Water is
+  gone. The development provider serves it; the service and both seeders write it
+  through the shared `syncBillCatalog`, which retires unlisted rows and refreshes
+  on a catalogue revision change.
+- Billers expose `referenceKind`/`referenceLabel`, products `validity`, payments
+  their product. References are normalised per kind at validation and payment,
+  and a malformed one gets a specific 422.
+- Validation: new `test/bill-payments.integration-spec.ts` (catalogue order and
+  Water retirement, packages, malformed phone, airtime paid with the number typed
+  differently at each step, fixed-price cable) passed against a throwaway local
+  Postgres after all migrations; the full seed ran on the same database. Typecheck,
+  lint and the full unit suite (1,010 tests) pass.
+
 ## 2026-09-25 — Short share links and public listing
 
 - Added `shortCode` (all three products) and `publiclyListed` (Ajo groups, Akawo

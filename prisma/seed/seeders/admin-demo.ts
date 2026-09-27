@@ -9,7 +9,6 @@ import {
   AjoMemberRole,
   AjoMemberStatus,
   AjoSlotStatus,
-  BillCatalogStatus,
   BillPaymentStatus,
   ContributionFrequency,
   FinancialAccountPurpose,
@@ -29,6 +28,8 @@ import {
   UserStatus,
   VerificationType,
 } from '../../../generated/prisma/enums.js';
+import { syncBillCatalog } from '../../../src/modules/bill-payments/bill-catalog-sync.js';
+import { MockBillPaymentProvider } from '../../../src/modules/bill-payments/providers/mock-bill-payment.provider.js';
 
 /**
  * Deterministic, clearly fake admin-demo data for the admin console.
@@ -499,39 +500,20 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
   });
 
   // --- Bill Payment catalog + payments ---
-  const category = await prisma.billCategory.upsert({
-    where: { provider_providerCode: { provider: 'mock', providerCode: 'DEV_AIRTIME' } },
-    update: {},
-    create: {
-      provider: 'mock',
-      providerCode: 'DEV_AIRTIME',
-      name: 'Airtime',
-      refreshedAt: new Date(),
-      expiresAt: new Date('2099-01-01T00:00:00Z'),
+  // The admin payments are MTN airtime from the one shared catalogue, so they
+  // appear under the same Airtime category members see rather than a second,
+  // development-only one.
+  await syncBillCatalog(
+    prisma,
+    new MockBillPaymentProvider(),
+    new Date(Date.now() + 90 * 86_400_000),
+  );
+  const airtime = await prisma.billProduct.findFirstOrThrow({
+    where: {
+      providerCode: 'MTN-VTU',
+      biller: { providerCode: 'MTN', category: { provider: 'mock', providerCode: 'AIRTIME' } },
     },
-  });
-  const biller = await prisma.billBiller.upsert({
-    where: { categoryId_providerCode: { categoryId: category.id, providerCode: 'DEV_MTN' } },
-    update: {},
-    create: {
-      categoryId: category.id,
-      providerCode: 'DEV_MTN',
-      name: 'MTN Airtime',
-      refreshedAt: new Date(),
-      expiresAt: new Date('2099-01-01T00:00:00Z'),
-    },
-  });
-  await prisma.billProduct.upsert({
-    where: { billerId_providerCode: { billerId: biller.id, providerCode: 'DEV_MTN_500' } },
-    update: {},
-    create: {
-      billerId: biller.id,
-      providerCode: 'DEV_MTN_500',
-      name: 'MTN ₦500 Airtime',
-      fixedAmountMinor: 500_00n,
-      currency: 'NGN',
-      status: BillCatalogStatus.ACTIVE,
-    },
+    select: { id: true, billerId: true },
   });
 
   const payingUserIds = [
@@ -555,9 +537,8 @@ export async function seedAdminDemo(prisma: PrismaClient): Promise<void> {
         requestHash: `dev-request-hash-${index + 1}`,
         userId: payingUserId,
         walletId: wallet.id,
-        billerId: biller.id,
-        productId: (await prisma.billProduct.findFirstOrThrow({ where: { billerId: biller.id } }))
-          .id,
+        billerId: airtime.billerId,
+        productId: airtime.id,
         customerReferenceDigest: `dev-digest-${index + 1}`,
         customerReferenceMasked: '0803******12',
         verifiedCustomerName: 'Dev Customer',
