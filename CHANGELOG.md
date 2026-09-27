@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Bills are paid through the payment intent** (ADR-014). `BILL_PAYMENT` is a
+  payment target: the quote shows the bill fee, confirming needs the transaction
+  PIN, the money is reserved and the provider called after commit, and the
+  intent ends succeeded, failed with a full refund, or processing until
+  reconciliation. The PIN-less `POST /bill-payments` route is removed.
+  `PaymentTarget` gains optional `feeCode`, `holdsFee`, `verifyConfirmation`
+  and `afterCommit`. Migration `20260927180000_bill_payment_intents` adds the
+  target type.
+
 - **The Nigerian bill catalogue.** Airtime (MTN, Airtel, Glo, 9mobile),
   Internet (the four networks' data plans, Smile, Spectranet), Electricity (all
   twelve DisCos, prepaid and postpaid) and Cable TV (DStv, GOtv, StarTimes) are

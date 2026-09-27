@@ -34,8 +34,10 @@ import {
 import { PAYMENT_PROVIDER, type PaymentProvider } from './providers/payment-provider.js';
 import {
   PAYMENT_TARGETS,
+  type ConfirmationDetails,
   type PaymentTarget,
   type PaymentTargetRegistry,
+  type SettledPayment,
 } from './targets/payment-target.js';
 import type { CreateIntentDto } from './dto/create-intent.dto.js';
 import type { ConfirmIntentDto } from './dto/confirm-intent.dto.js';
@@ -118,10 +120,9 @@ export class PaymentsService {
     // Deposits are the only target that funds the wallet from outside, so they
     // carry the deposit fee; everything else moves money already inside the
     // ledger and is not charged again. See ADR-009.
-    const feeMinor =
-      dto.targetType === PaymentTargetType.WALLET_TOPUP
-        ? (await this.fees.assess('DEPOSIT', target.amountMinor)).amountMinor
-        : 0n;
+    const feeMinor = handler.feeCode
+      ? (await this.fees.assess(handler.feeCode, target.amountMinor)).amountMinor
+      : 0n;
     const wallet = await this.prisma.wallet.findFirst({
       where: { userId, currency: target.currency },
       select: { id: true },
@@ -179,8 +180,9 @@ export class PaymentsService {
     if (!isPayable(intent.status, intent.expiresAt, new Date())) {
       throw new ConflictException('This payment has expired. Start it again.');
     }
+    const handler = this.targets[intent.targetType];
     // Checked before the PIN, so an unsupported method costs no PIN attempt.
-    if (!this.targets[intent.targetType].methods.includes(dto.method)) {
+    if (!handler.methods.includes(dto.method)) {
       throw new UnprocessableEntityException(
         dto.method === PaymentMethod.WALLET
           ? 'This payment cannot be made from your wallet'
@@ -188,10 +190,16 @@ export class PaymentsService {
       );
     }
 
+    const details = {
+      ...(dto.customerReference ? { customerReference: dto.customerReference } : {}),
+    };
+    // Also before the PIN: a mistyped number is not a reason to lose an attempt.
+    await handler.verifyConfirmation?.(this.prisma, userId, intent.targetId, details);
+
     await this.pins.verifyPin(userId, dto.transactionPin);
 
     return settlesSynchronously(dto.method)
-      ? this.settleFromWallet(userId, intentId, idempotencyKey)
+      ? this.settleFromWallet(userId, intentId, idempotencyKey, handler, details)
       : this.startExternal(userId, intentId, dto.method);
   }
 
@@ -207,7 +215,11 @@ export class PaymentsService {
     userId: string,
     intentId: string,
     idempotencyKey: string,
+    handler: PaymentTarget,
+    details: ConfirmationDetails,
   ): Promise<PaymentIntentView> {
+    const completesLater = typeof handler.afterCommit === 'function';
+    let settledPayment: SettledPayment | null = null;
     const settled = await this.transactions.serializable(async (tx) => {
       const intent = await tx.paymentIntent.findFirst({ where: { id: intentId, userId } });
       if (!intent) throw new NotFoundException('Payment was not found');
@@ -218,7 +230,6 @@ export class PaymentsService {
 
       // Re-resolved inside the transaction: the amount is only trustworthy if
       // the target still says so at the moment money moves.
-      const handler = this.targets[intent.targetType];
       const target = await handler.resolve(
         tx,
         userId,
@@ -252,11 +263,13 @@ export class PaymentsService {
           {
             accountId: destination.id,
             direction: 'CREDIT',
-            amountMinor: intent.amountMinor,
+            // A target that may still fail holds the fee with the amount, so
+            // both can be returned; see PaymentTarget.holdsFee.
+            amountMinor: handler.holdsFee ? intent.totalMinor : intent.amountMinor,
           },
           // Only present when a fee is actually charged, so a zero-fee target
           // does not put an empty row in the ledger.
-          ...(intent.feeMinor > 0n
+          ...(intent.feeMinor > 0n && !handler.holdsFee
             ? [
                 {
                   accountId: accounts.feeRevenue.id,
@@ -268,23 +281,27 @@ export class PaymentsService {
         ],
       });
 
-      await handler.settle(tx, {
+      settledPayment = {
         userId,
         targetId: intent.targetId,
         intentId: intent.id,
         amountMinor: intent.amountMinor,
+        feeMinor: intent.feeMinor,
         currency: intent.currency,
         ledgerTransactionId: posting.id,
-      });
+      };
+      await handler.settle(tx, settledPayment);
 
       return tx.paymentIntent.update({
         where: { id: intent.id },
         data: {
-          status: PaymentIntentStatus.SUCCEEDED,
+          // A target finished after commit is not done yet: it is PROCESSING
+          // until afterCommit reports what the provider said.
+          status: completesLater ? PaymentIntentStatus.PROCESSING : PaymentIntentStatus.SUCCEEDED,
           method: PaymentMethod.WALLET,
           ledgerTransactionId: posting.id,
           confirmedAt: new Date(),
-          settledAt: new Date(),
+          ...(completesLater ? {} : { settledAt: new Date() }),
         },
       });
     });
@@ -300,6 +317,17 @@ export class PaymentsService {
         method: 'WALLET',
       },
     });
+
+    if (completesLater && settledPayment && handler.afterCommit) {
+      // Outside the transaction: this calls a provider. The target records the
+      // outcome on the intent itself, so a crash here leaves it PROCESSING and
+      // reconciliation, not this request, finishes it.
+      await handler.afterCommit(settledPayment, details).catch(() => 'PROCESSING' as const);
+      const finished = await this.prisma.paymentIntent.findUniqueOrThrow({
+        where: { id: settled.id },
+      });
+      return this.view(finished, await this.describe(finished));
+    }
 
     return this.view(settled, await this.describe(settled));
   }

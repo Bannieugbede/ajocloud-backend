@@ -28,7 +28,10 @@ import { LedgerService } from '../src/modules/ledger/ledger.service.js';
 import type { TransactionalNotificationService } from '../src/modules/notifications/transactional-notification.service.js';
 import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { AkawoPoolDueTarget } from '../src/modules/payments/targets/akawo-pool-due.target.js';
-import { paymentTargetRegistry } from '../src/modules/payments/targets/payment-target.js';
+import {
+  type PaymentTarget,
+  paymentTargetRegistry,
+} from '../src/modules/payments/targets/payment-target.js';
 import { WalletTopUpTarget } from '../src/modules/payments/targets/wallet-topup.target.js';
 
 const runDatabaseTests =
@@ -86,6 +89,8 @@ describeWithDatabase('Paying every product through one contract (PostgreSQL inte
       new AjoContributionTarget(settlement),
       foodTarget,
       new WalletTopUpTarget(),
+      // Registered so the registry is complete; bills have their own suite.
+      { type: PaymentTargetType.BILL_PAYMENT, methods: [] } as unknown as PaymentTarget,
     ]),
   );
   const food = new FoodAjoProgrammesService(

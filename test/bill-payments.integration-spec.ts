@@ -230,9 +230,10 @@ describeWithDatabase('bill payments (PostgreSQL integration)', () => {
       amountMinor: '100000',
     })) as { status: string; totalDebitMinor: bigint };
     expect(payment.status).toBe('SUCCESSFUL');
+    // The total debited, so a configured fee does not break the arithmetic.
     await expect(
       transactions.run((tx) => ledger.accountBalanceWithin(tx, availableId)),
-    ).resolves.toBe(99_000_00n);
+    ).resolves.toBe(100_000_00n - BigInt(payment.totalDebitMinor));
   });
 
   it('charges a cable package at exactly its price', async () => {

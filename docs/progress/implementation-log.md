@@ -1,5 +1,19 @@
 # Implementation log
 
+## 2026-09-27 — Bill payments through the payment intent
+
+- `BillPaymentTarget` (ADR-014): quote from the validation, PIN-guarded
+  confirm carrying the number, reserve in the settlement transaction, provider
+  call after commit, intent kept in step through settle/release/reconcile.
+- `PaymentTarget` gains optional `feeCode`, `holdsFee`, `verifyConfirmation`,
+  `afterCommit`; the deposit fee moved onto `WalletTopUpTarget.feeCode`.
+- Removed `POST /bill-payments`. Mock provider declines references ending 9999.
+- Validation: new `test/bill-payment-intents.integration-spec.ts` (quote, fixed
+  price, reference checked before PIN, success, decline with full refund,
+  provider outage then reconciliation, held fee) and every other integration
+  suite (55 tests) pass on a fresh local Postgres, twice over the same database.
+  Unit (1,011) and e2e including the module graph pass.
+
 ## 2026-09-27 — Nigerian bill catalogue
 
 - Defined the catalogue once in `domain/nigeria-bill-catalog.ts`: Airtime (4

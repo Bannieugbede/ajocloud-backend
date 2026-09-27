@@ -12,6 +12,7 @@ import {
   BillPaymentAttemptStatus,
   BillPaymentStatus,
   FinancialAccountPurpose,
+  PaymentIntentStatus,
   ReconciliationState,
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
@@ -409,6 +410,7 @@ export class BillPaymentsService {
           where: { billPaymentId_attemptNumber: { billPaymentId: payment.id, attemptNumber: 1 } },
           data: { status: BillPaymentAttemptStatus.FAILED, completedAt: new Date() },
         });
+        await this.syncIntent(tx, payment.metadata, 'FAILED');
         await this.recordEvent(tx, userId, payment.id, 'bill-payment.failed');
       } else {
         const posting = await this.ledger.postWithin(tx, {
@@ -473,6 +475,7 @@ export class BillPaymentsService {
             },
           },
         });
+        await this.syncIntent(tx, payment.metadata, 'SUCCEEDED');
         await this.recordEvent(tx, userId, payment.id, 'bill-payment.successful');
       }
       const updated = await tx.billPayment.findUnique({ where: { id: payment.id } });
@@ -546,6 +549,286 @@ export class BillPaymentsService {
       });
       await this.recordEvent(tx, actorUserId, payment.id, 'bill-payment.reversed');
       return this.publicPayment(reversed);
+    });
+  }
+
+  /**
+   * What a bill paid through a payment intent costs, and proof the payer may
+   * pay it. `validationId` is the intent's target: a payment always quotes a
+   * current validation of the number it pays.
+   */
+  async quoteForIntent(
+    client: TransactionClient | PrismaService,
+    userId: string,
+    validationId: string | null,
+    requestedAmountMinor: bigint | null,
+  ): Promise<{ amountMinor: bigint; currency: string; description: string }> {
+    const validation = validationId
+      ? await client.billCustomerValidation.findFirst({
+          where: { id: validationId, userId, provider: this.provider.name },
+        })
+      : null;
+    if (!validation) throw new NotFoundException('This payment was not found');
+    if (!validation.valid || validation.expiresAt <= new Date()) {
+      throw new UnprocessableEntityException('Check the number again before paying');
+    }
+    const biller = await client.billBiller.findFirst({
+      where: { id: validation.billerId, status: 'ACTIVE', category: { status: 'ACTIVE' } },
+      select: { name: true },
+    });
+    if (!biller) throw new NotFoundException('This biller is no longer available');
+    const product = validation.productId
+      ? await client.billProduct.findFirst({
+          where: { id: validation.productId, status: 'ACTIVE' },
+        })
+      : null;
+    if (validation.productId && !product) {
+      throw new NotFoundException('This package is no longer available');
+    }
+    const currency = product?.currency ?? 'NGN';
+    // A fixed-price package is paid at its price whatever was asked; asking
+    // for a different figure is refused rather than quietly corrected.
+    const amountMinor = requestedAmountMinor ?? product?.fixedAmountMinor ?? null;
+    if (amountMinor === null) throw new UnprocessableEntityException('Choose how much to pay');
+    this.assertAmount(amountMinor, currency, product);
+    return {
+      amountMinor,
+      currency,
+      description: billDescription(
+        biller.name,
+        product?.name ?? null,
+        validation.customerReferenceMasked,
+      ),
+    };
+  }
+
+  /** A label for a receipt; never throws. */
+  async describeIntent(client: TransactionClient | PrismaService, validationId: string | null) {
+    const validation = validationId
+      ? await client.billCustomerValidation
+          .findUnique({ where: { id: validationId } })
+          .catch(() => null)
+      : null;
+    if (!validation) return 'Bill payment';
+    const [biller, product] = await Promise.all([
+      client.billBiller.findUnique({ where: { id: validation.billerId }, select: { name: true } }),
+      validation.productId
+        ? client.billProduct.findUnique({
+            where: { id: validation.productId },
+            select: { name: true },
+          })
+        : null,
+    ]).catch(() => [null, null] as const);
+    return biller
+      ? billDescription(biller.name, product?.name ?? null, validation.customerReferenceMasked)
+      : 'Bill payment';
+  }
+
+  /**
+   * Refuses a confirmation whose number is not the one that was validated, so
+   * the provider can only ever be paid for the number the payer was shown.
+   */
+  async verifyIntentReference(
+    client: TransactionClient | PrismaService,
+    userId: string,
+    validationId: string | null,
+    customerReference: string | undefined,
+  ): Promise<void> {
+    if (!customerReference) {
+      throw new UnprocessableEntityException('The number being paid for is missing');
+    }
+    const validation = validationId
+      ? await client.billCustomerValidation.findFirst({ where: { id: validationId, userId } })
+      : null;
+    if (!validation) throw new NotFoundException('This payment was not found');
+    const biller = await client.billBiller.findUnique({
+      where: { id: validation.billerId },
+      select: { catalogData: true },
+    });
+    const normalised = this.normaliseReference(
+      referenceOf(biller?.catalogData).kind,
+      customerReference,
+    );
+    if (this.digest(normalised) !== validation.customerReferenceDigest) {
+      throw new UnprocessableEntityException(
+        'This number is not the one that was checked. Start the payment again.',
+      );
+    }
+  }
+
+  /** The payer's reserved balance, where a bill's money waits for the provider. */
+  async reservedAccountForIntent(
+    tx: TransactionClient,
+    validationId: string | null,
+    currency: string,
+  ): Promise<{ id: string }> {
+    const validation = validationId
+      ? await tx.billCustomerValidation.findUnique({ where: { id: validationId } })
+      : null;
+    if (!validation) throw new NotFoundException('This payment was not found');
+    const account = await tx.financialAccount.findFirst({
+      where: {
+        purpose: FinancialAccountPurpose.WALLET_RESERVED,
+        currency,
+        isActive: true,
+        wallet: { userId: validation.userId, currency },
+      },
+      select: { id: true },
+    });
+    if (!account) {
+      throw new UnprocessableEntityException('Required financial accounts are not configured');
+    }
+    return account;
+  }
+
+  /**
+   * Records a bill whose money the intent has just moved into reserve, inside
+   * the same transaction. The provider is called afterwards, by
+   * `completeIntentPayment`, so the reserve and this row commit together.
+   */
+  async recordIntentPayment(
+    tx: TransactionClient,
+    payment: {
+      userId: string;
+      targetId: string | null;
+      intentId: string;
+      amountMinor: bigint;
+      feeMinor: bigint;
+      currency: string;
+      ledgerTransactionId: string;
+    },
+  ): Promise<void> {
+    const validation = payment.targetId
+      ? await tx.billCustomerValidation.findUnique({ where: { id: payment.targetId } })
+      : null;
+    if (!validation) throw new NotFoundException('This payment was not found');
+    const wallet = await tx.wallet.findFirst({
+      where: { userId: payment.userId, currency: payment.currency },
+      select: { id: true },
+    });
+    if (!wallet) throw new UnprocessableEntityException('No wallet is available for this currency');
+    const created = await tx.billPayment.create({
+      data: {
+        internalReference: `BILL-${randomUUID()}`,
+        provider: this.provider.name,
+        idempotencyKey: intentPaymentKey(payment.intentId),
+        requestHash: this.digest(payment.intentId),
+        userId: payment.userId,
+        walletId: wallet.id,
+        billerId: validation.billerId,
+        ...(validation.productId ? { productId: validation.productId } : {}),
+        validationId: validation.id,
+        customerReferenceDigest: validation.customerReferenceDigest,
+        customerReferenceMasked: validation.customerReferenceMasked,
+        ...(validation.verifiedCustomerName
+          ? { verifiedCustomerName: validation.verifiedCustomerName }
+          : {}),
+        amountMinor: payment.amountMinor,
+        feeMinor: payment.feeMinor,
+        totalDebitMinor: payment.amountMinor + payment.feeMinor,
+        currency: payment.currency,
+        status: BillPaymentStatus.PENDING,
+        validatedAt: new Date(),
+        reserveLedgerTransactionId: payment.ledgerTransactionId,
+        metadata: { paymentIntentId: payment.intentId },
+      },
+    });
+    const fee = await tx.feeDefinition.findFirst({
+      where: {
+        code: 'BILL_PAYMENT',
+        isActive: true,
+        effectiveAt: { lte: new Date() },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      orderBy: { version: 'desc' },
+      select: { id: true },
+    });
+    if (fee) {
+      await tx.feeAssessment.create({
+        data: {
+          feeDefinitionId: fee.id,
+          subjectType: 'BillPayment',
+          subjectId: created.id,
+          amountMinor: payment.feeMinor,
+          currency: payment.currency,
+          calculationBaseMinor: payment.amountMinor,
+          ruleSnapshot: { source: 'payment-intent', paymentIntentId: payment.intentId },
+        },
+      });
+    }
+    await tx.billPaymentAttempt.create({
+      data: { billPaymentId: created.id, attemptNumber: 1, requestHash: created.requestHash },
+    });
+    await this.recordEvent(tx, payment.userId, created.id, 'bill-payment.reserved');
+  }
+
+  /**
+   * Sends a reserved bill to the provider and applies the answer. Runs after
+   * the reserve has committed; never throws for a provider failure, because
+   * the money is already held and must be either paid out or returned.
+   */
+  async completeIntentPayment(
+    userId: string,
+    intentId: string,
+    customerReference: string | undefined,
+  ): Promise<'SUCCEEDED' | 'FAILED' | 'PROCESSING'> {
+    const payment = await this.prisma.billPayment.findUnique({
+      where: { userId_idempotencyKey: { userId, idempotencyKey: intentPaymentKey(intentId) } },
+      include: { biller: { select: { providerCode: true, catalogData: true } }, product: true },
+    });
+    if (!payment) return 'PROCESSING';
+    if (payment.status !== BillPaymentStatus.PENDING) return outcomeOf(payment.status);
+    if (!customerReference) {
+      await this.markUncertain(payment.id);
+      return 'PROCESSING';
+    }
+    let result: ProviderBillPayment;
+    try {
+      result = await this.provider.createPayment({
+        internalReference: payment.internalReference,
+        billerCode: payment.biller.providerCode,
+        ...(payment.product ? { productCode: payment.product.providerCode } : {}),
+        customerReference: this.normaliseReference(
+          referenceOf(payment.biller.catalogData).kind,
+          customerReference,
+        ),
+        amountMinor: payment.amountMinor,
+        currency: payment.currency,
+      });
+    } catch {
+      await this.markUncertain(payment.id);
+      return 'PROCESSING';
+    }
+    await this.applyProviderResult(payment.id, userId, result);
+    const finished = await this.prisma.billPayment.findUniqueOrThrow({
+      where: { id: payment.id },
+      select: { status: true },
+    });
+    return outcomeOf(finished.status);
+  }
+
+  /**
+   * Keeps a bill's payment intent in step with the bill, so the payment screens
+   * report what the provider actually did. Only bills paid through an intent
+   * carry one.
+   */
+  private async syncIntent(
+    tx: TransactionClient,
+    metadata: unknown,
+    outcome: 'SUCCEEDED' | 'FAILED',
+  ): Promise<void> {
+    const intentId = record(metadata).paymentIntentId;
+    if (typeof intentId !== 'string') return;
+    await tx.paymentIntent.updateMany({
+      where: { id: intentId, status: PaymentIntentStatus.PROCESSING },
+      data:
+        outcome === 'SUCCEEDED'
+          ? { status: PaymentIntentStatus.SUCCEEDED, settledAt: new Date() }
+          : {
+              status: PaymentIntentStatus.FAILED,
+              failureReason:
+                'The provider could not complete this payment. Your money is back in your wallet.',
+            },
     });
   }
 
@@ -777,4 +1060,21 @@ function referenceOf(catalogData: unknown): { kind: BillReferenceKind | null; la
 function validityOf(catalogData: unknown): string | null {
   const validity = record(catalogData).validity;
   return typeof validity === 'string' ? validity : null;
+}
+
+/** The bill row an intent's payment is recorded as, found again by this key. */
+function intentPaymentKey(intentId: string): string {
+  return `intent:${intentId}`;
+}
+
+function outcomeOf(status: BillPaymentStatus): 'SUCCEEDED' | 'FAILED' | 'PROCESSING' {
+  if (status === BillPaymentStatus.SUCCESSFUL) return 'SUCCEEDED';
+  if (status === BillPaymentStatus.FAILED) return 'FAILED';
+  return 'PROCESSING';
+}
+
+/** "DStv Compact · ******7841", or the biller alone for a plain top-up. */
+function billDescription(biller: string, product: string | null, masked: string): string {
+  const what = product && product !== 'Airtime top-up' ? `${biller} ${product}` : biller;
+  return `${what} · ${masked}`;
 }

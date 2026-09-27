@@ -410,6 +410,7 @@ enum PaymentTargetType {
   AJO_CONTRIBUTION
   FOOD_SUBSCRIPTION
   WALLET_TOPUP
+  BILL_PAYMENT
 }
 
 enum PaymentMethod {

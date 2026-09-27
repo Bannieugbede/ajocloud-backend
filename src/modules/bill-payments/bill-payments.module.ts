@@ -6,6 +6,7 @@ import { LedgerModule } from '../ledger/ledger.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { BillPaymentsController } from './bill-payments.controller.js';
 import { AdminBillPaymentsController } from './admin-bill-payments.controller.js';
+import { BillPaymentTarget } from './bill-payment.payment-target.js';
 import { BillPaymentsService } from './bill-payments.service.js';
 import { BILL_PAYMENT_PROVIDER } from './providers/bill-payment-provider.js';
 import { MockBillPaymentProvider } from './providers/mock-bill-payment.provider.js';
@@ -15,6 +16,7 @@ import { MockBillPaymentProvider } from './providers/mock-bill-payment.provider.
   controllers: [BillPaymentsController, AdminBillPaymentsController],
   providers: [
     BillPaymentsService,
+    BillPaymentTarget,
     MockBillPaymentProvider,
     MonnifyBillPaymentProvider,
     {
@@ -27,5 +29,7 @@ import { MockBillPaymentProvider } from './providers/mock-bill-payment.provider.
       ) => (config.get('BILL_PAYMENT_PROVIDER', { infer: true }) === 'monnify' ? monnify : mock),
     },
   ],
+  // The shared payment flow pays bills through this target (ADR-014).
+  exports: [BillPaymentTarget],
 })
 export class BillPaymentsModule {}

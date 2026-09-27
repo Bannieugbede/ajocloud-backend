@@ -23,7 +23,9 @@ import type {
  * Deterministic rejections, for testing the unhappy paths:
  * - a reference of the wrong shape for its biller is invalid;
  * - the literal reference "invalid", and any reference ending in "0000", are
- *   refused as if the provider did not recognise them.
+ *   refused as if the provider did not recognise them;
+ * - a reference ending in "9999" validates but its payment is declined, so a
+ *   failed bill and the refund that follows can be exercised.
  */
 @Injectable()
 export class MockBillPaymentProvider implements BillPaymentProvider {
@@ -74,6 +76,14 @@ export class MockBillPaymentProvider implements BillPaymentProvider {
   }
 
   createPayment(input: CreateBillPaymentInput): Promise<ProviderBillPayment> {
+    if (input.customerReference.endsWith('9999')) {
+      return Promise.resolve({
+        providerReference: `mock-payment-${input.internalReference}`,
+        state: 'FAILED',
+        providerStatus: 'DECLINED',
+        failureCode: 'MOCK_DECLINED',
+      });
+    }
     return Promise.resolve({
       providerReference: `mock-payment-${input.internalReference}`,
       state: 'SUCCESSFUL',

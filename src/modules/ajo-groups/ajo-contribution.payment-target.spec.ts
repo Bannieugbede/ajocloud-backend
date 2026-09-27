@@ -104,6 +104,7 @@ describe('AjoContributionTarget', () => {
       targetId: SCHEDULE,
       intentId: 'intent-1',
       amountMinor: 2_500_00n,
+      feeMinor: 0n,
       currency: 'NGN',
       ledgerTransactionId: 'ledger-1',
     });

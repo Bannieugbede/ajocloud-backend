@@ -118,6 +118,7 @@ describe('FoodSubscriptionTarget', () => {
       targetId: SUBSCRIPTION,
       intentId: 'intent-1',
       amountMinor: 80_000_00n,
+      feeMinor: 0n,
       currency: 'NGN',
       ledgerTransactionId: 'ledger-1',
     });

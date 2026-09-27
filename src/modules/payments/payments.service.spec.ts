@@ -6,6 +6,7 @@ import { AjoContributionTarget } from '../ajo-groups/ajo-contribution.payment-ta
 import { FoodSubscriptionTarget } from '../food-ajo/food-subscription.payment-target.js';
 import { PaymentsService } from './payments.service.js';
 import { AkawoPoolDueTarget } from './targets/akawo-pool-due.target.js';
+import { BillPaymentTarget } from '../bill-payments/bill-payment.payment-target.js';
 import { paymentTargetRegistry } from './targets/payment-target.js';
 import { WalletTopUpTarget } from './targets/wallet-topup.target.js';
 
@@ -170,6 +171,7 @@ function build(seed: Seed = {}) {
       new AjoContributionTarget({} as never),
       new FoodSubscriptionTarget({} as never),
       new WalletTopUpTarget(),
+      new BillPaymentTarget({} as never),
     ]),
   );
 

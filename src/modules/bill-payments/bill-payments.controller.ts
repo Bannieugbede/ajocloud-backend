@@ -2,20 +2,17 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { BillPaymentsService } from './bill-payments.service.js';
-import { CreateBillPaymentDto } from './dto/create-bill-payment.dto.js';
 import { ValidateBillCustomerDto } from './dto/validate-bill-customer.dto.js';
 
 @ApiTags('bill-payments')
@@ -40,17 +37,9 @@ export class BillPaymentsController {
     return this.bills.validateCustomer(user.userId, dto);
   }
 
-  @Post()
-  create(
-    @CurrentUser() user: AuthenticatedUser,
-    @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @Body() dto: CreateBillPaymentDto,
-  ) {
-    if (!idempotencyKey || idempotencyKey.length > 128) {
-      throw new BadRequestException('A valid Idempotency-Key header is required');
-    }
-    return this.bills.create(user.userId, idempotencyKey, dto);
-  }
+  // Paying is not here: a bill is paid through the shared payment intent
+  // (targetType BILL_PAYMENT), which asks for the transaction PIN and quotes
+  // the fee. The direct route debited a wallet without either. See ADR-014.
 
   @Get()
   list(@CurrentUser() user: AuthenticatedUser) {

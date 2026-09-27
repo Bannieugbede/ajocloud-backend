@@ -48,4 +48,19 @@ describe('mock Bill Payment provider', () => {
       provider.validateCustomer({ billerCode, customerReference }),
     ).resolves.toMatchObject({ valid: false });
   });
+
+  it('declines a payment for a reference ending in 9999, after validating it', async () => {
+    await expect(
+      provider.validateCustomer({ billerCode: 'MTN', customerReference: '08031239999' }),
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      provider.createPayment({
+        internalReference: 'BILL-1',
+        billerCode: 'MTN',
+        customerReference: '08031239999',
+        amountMinor: 100_00n,
+        currency: 'NGN',
+      }),
+    ).resolves.toMatchObject({ state: 'FAILED' });
+  });
 });

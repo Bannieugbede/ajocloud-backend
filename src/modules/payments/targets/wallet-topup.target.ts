@@ -21,6 +21,8 @@ export class WalletTopUpTarget implements PaymentTarget {
   readonly type = PaymentTargetType.WALLET_TOPUP;
   readonly methods = [PaymentMethod.TRANSFER, PaymentMethod.CARD] as const;
   readonly amountRule = 'chosen' as const;
+  /** Money arriving from outside carries the deposit fee (ADR-009). */
+  readonly feeCode = 'DEPOSIT' as const;
 
   async resolve(
     client: PaymentTargetClient,

@@ -12,5 +12,6 @@
 - [ADR-009: Cost-plus tiered platform fees](ADR-009-platform-fee-model.md) — deposits priced above provider cost with a tiered markup; half-open bands; rates are versioned data, not code.
 - [ADR-010: Ledger posting for settlement webhooks](ADR-010-webhook-ledger-posting.md) — a verified success credits the wallet net of fee; reversals stay with reconciliation.
 - [ADR-013: One payment contract, with each product as a target](ADR-013-payment-targets.md) — products implement `PaymentTarget`; product payments come from the wallet; Ajo may be paid in part; Food is held in escrow.
+- [ADR-014 — Bill payments are paid through the payment intent](ADR-014-bill-payments-through-intents.md)
 
 Financial-rule changes require a new ADR or an explicit update to an existing one.

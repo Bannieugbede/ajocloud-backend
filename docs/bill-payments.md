@@ -25,6 +25,18 @@ The development provider refuses a reference ending in `0000`, or the literal `i
 
 The application depends on `BillPaymentProvider`. The development mock adapter is deterministic and is never a claim of real payment. The Monnify class intentionally throws until current official bill-payment documentation and commercial requirements are reviewed; no endpoint, payload, status, signature, or retry rule has been guessed.
 
+## Paying
+
+A bill is paid through the shared payment intent (ADR-014): validate the
+number, then `POST /payments/intents` with `targetType: BILL_PAYMENT`,
+`targetId: <validationId>` and `amountMinor`, then confirm with the method
+`WALLET`, the transaction PIN and `customerReference`. The intent quotes the
+`BILL_PAYMENT` fee, moves the total into the payer's reserve, and calls the
+provider after the transaction commits; it ends `SUCCEEDED`, `FAILED` (money
+returned) or stays `PROCESSING` until reconciliation. The former direct
+`POST /bill-payments` is removed. The development provider declines a payment
+whose reference ends in `9999`.
+
 ## Funds lifecycle
 
 1. Validate the customer through the selected provider and persist only a digest/masked reference.

@@ -1,5 +1,6 @@
 import type { PaymentMethod, PaymentTargetType } from '../../../../generated/prisma/enums.js';
 import type { PrismaService } from '../../../infrastructure/database/prisma.service.js';
+import type { FeeCode } from '../../fees/fees.service.js';
 import type { TransactionClient } from '../../../infrastructure/database/transaction.service.js';
 
 /** Either the root client or a transaction, so a target resolves the same way in both. */
@@ -32,9 +33,23 @@ export interface SettledPayment {
   readonly targetId: string | null;
   readonly intentId: string;
   readonly amountMinor: bigint;
+  /** The fee charged on top, already debited with the amount. */
+  readonly feeMinor: bigint;
   readonly currency: string;
   readonly ledgerTransactionId: string;
 }
+
+/**
+ * Details a payer supplies when confirming, used for that one confirmation and
+ * never stored. A bill payment needs the customer's number to send to the
+ * provider, and only a digest of it is kept.
+ */
+export interface ConfirmationDetails {
+  readonly customerReference?: string;
+}
+
+/** Where a payment completed after its transaction ended up. */
+export type AfterCommitOutcome = 'SUCCEEDED' | 'FAILED' | 'PROCESSING';
 
 /**
  * One kind of thing a member can pay for: an Akawo pool due, an Ajo
@@ -60,6 +75,20 @@ export interface PaymentTarget {
   readonly methods: readonly PaymentMethod[];
 
   readonly amountRule: PaymentAmountRule;
+
+  /**
+   * The fee this target is charged, if any. Assessed on the amount when the
+   * intent is created and shown in its quote.
+   */
+  readonly feeCode?: FeeCode;
+
+  /**
+   * Credit the fee to `creditAccount` with the amount, rather than to fee
+   * revenue at once. For a target that may still fail after money moves: the
+   * fee is only earned when the target completes, and until then it must be
+   * returnable with the rest.
+   */
+  readonly holdsFee?: boolean;
 
   /**
    * Reads what the target costs and proves `userId` may pay it.
@@ -102,6 +131,28 @@ export interface PaymentTarget {
    * settled. Never throws: it is for display on a receipt, not authorisation.
    */
   describe(client: PaymentTargetClient, targetId: string | null): Promise<string>;
+
+  /**
+   * Checks what the payer supplied with the confirmation, before the PIN is
+   * verified, so a missing or mismatched detail costs no PIN attempt.
+   */
+  verifyConfirmation?(
+    client: PaymentTargetClient,
+    userId: string,
+    targetId: string | null,
+    details: ConfirmationDetails,
+  ): Promise<void>;
+
+  /**
+   * Work that must happen after the settlement transaction commits, because it
+   * calls out to a provider and no transaction may be held across network I/O.
+   *
+   * A target that has this is left PROCESSING by the transaction; the outcome
+   * returned here decides where the intent ends. It must not throw for a
+   * provider failure: money is already held, so an uncertain result is
+   * `PROCESSING` and a refused one is `FAILED` with the money returned.
+   */
+  afterCommit?(payment: SettledPayment, details: ConfirmationDetails): Promise<AfterCommitOutcome>;
 }
 
 /** Nest token for the registry of every target, keyed by type. */

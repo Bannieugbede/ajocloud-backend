@@ -10,6 +10,8 @@ import { LedgerModule } from '../ledger/ledger.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { AjoContributionTarget } from '../ajo-groups/ajo-contribution.payment-target.js';
 import { AjoGroupsModule } from '../ajo-groups/ajo-groups.module.js';
+import { BillPaymentTarget } from '../bill-payments/bill-payment.payment-target.js';
+import { BillPaymentsModule } from '../bill-payments/bill-payments.module.js';
 import { FoodAjoModule } from '../food-ajo/food-ajo.module.js';
 import { FoodSubscriptionTarget } from '../food-ajo/food-subscription.payment-target.js';
 import { PaymentTargetType } from '../../../generated/prisma/enums.js';
@@ -37,6 +39,7 @@ import { PAYMENT_PROVIDER } from './providers/payment-provider.js';
     // mechanics every payment shares. See ADR-013.
     AjoGroupsModule,
     FoodAjoModule,
+    BillPaymentsModule,
   ],
   controllers: [PaymentsController],
   providers: [
@@ -52,6 +55,7 @@ import { PAYMENT_PROVIDER } from './providers/payment-provider.js';
         AjoContributionTarget,
         FoodSubscriptionTarget,
         WalletTopUpTarget,
+        BillPaymentTarget,
       ],
       // Every target type must have exactly one handler, checked at boot so a
       // new type without one fails the deploy rather than a member's payment.
