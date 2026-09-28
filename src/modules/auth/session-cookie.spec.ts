@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { wantsSessionCookies } from './session-cookie.js';
+import { refreshTokenFrom, wantsSessionCookies } from './session-cookie.js';
 
 const request = (headers: Record<string, string>): FastifyRequest =>
   ({ headers }) as unknown as FastifyRequest;
@@ -18,5 +18,28 @@ describe('wantsSessionCookies', () => {
 
   it('treats an empty Origin as no Origin', () => {
     expect(wantsSessionCookies(request({ origin: '' }))).toBe(false);
+  });
+});
+
+describe('refreshTokenFrom', () => {
+  const request = (refreshCookie?: string) =>
+    ({
+      headers: {},
+      cookies: refreshCookie ? { ajo_refresh: refreshCookie } : {},
+    }) as unknown as FastifyRequest;
+
+  it('uses the token a native client posted, over a stale cookie in its jar', () => {
+    // Preferring the cookie presented an already-rotated token, which the
+    // server treats as theft and answers by revoking the session.
+    expect(refreshTokenFrom(request('stale'), 'current')).toBe('current');
+  });
+
+  it('uses the cookie for a browser, which cannot post the token', () => {
+    expect(refreshTokenFrom(request('browser'), undefined)).toBe('browser');
+  });
+
+  it('finds nothing when there is neither', () => {
+    expect(refreshTokenFrom(request(), undefined)).toBeUndefined();
+    expect(refreshTokenFrom(request(), '')).toBeUndefined();
   });
 });

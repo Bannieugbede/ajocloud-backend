@@ -22,9 +22,8 @@ import type { Environment } from '../../config/env.schema.js';
 import { AuthService } from './auth.service.js';
 import type { TokenPair } from './auth.service.js';
 import {
-  REFRESH_COOKIE,
   clearSessionCookies,
-  readCookie,
+  refreshTokenFrom,
   setSessionCookies,
   wantsSessionCookies,
 } from './session-cookie.js';
@@ -175,8 +174,8 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     // Browsers send the rotating refresh token as an httpOnly cookie; mobile
-    // clients still post it in the body.
-    const refreshToken = readCookie(request, REFRESH_COOKIE) ?? dto.refreshToken;
+    // posts it in the body, which wins over any stale cookie it carries.
+    const refreshToken = refreshTokenFrom(request, dto.refreshToken);
     if (!refreshToken) throw new UnauthorizedException('Authentication required');
     return this.issueSession(reply, await this.auth.refresh(refreshToken), request);
   }

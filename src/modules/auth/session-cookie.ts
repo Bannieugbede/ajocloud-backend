@@ -65,6 +65,24 @@ function refreshPath(apiPrefix: string): string {
  * none, so the absence of Origin is the signal, and it cannot be used to
  * *gain* cookies — only to decline them.
  */
+/**
+ * The refresh token a refresh request is asking to rotate.
+ *
+ * The body wins when it has one. Only a native client posts the token in the
+ * body; a browser never can, because its token is in an httpOnly cookie. A
+ * native client may still carry an old `ajo_refresh` cookie in its platform
+ * jar from before cookies were withheld from it, and preferring that cookie
+ * presented a token that had already been rotated: the server read it as
+ * theft and revoked a session that was fine, signing the member out on every
+ * launch.
+ */
+export function refreshTokenFrom(
+  request: FastifyRequest,
+  bodyToken: string | undefined,
+): string | undefined {
+  return bodyToken || readCookie(request, REFRESH_COOKIE) || undefined;
+}
+
 export function wantsSessionCookies(request: FastifyRequest): boolean {
   return typeof request.headers.origin === 'string' && request.headers.origin.length > 0;
 }
