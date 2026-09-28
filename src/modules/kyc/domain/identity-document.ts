@@ -9,8 +9,11 @@ import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } f
  * secret holds nothing readable.
  */
 
-/** The request body limit is 1 MiB, and base64 adds a third. */
-export const MAX_DOCUMENT_BYTES = 700 * 1024;
+/**
+ * 1.5 MiB: a phone photo at the app's compression, with room to spare. As
+ * base64 that is 2 MiB, inside the 2.5 MiB request limit.
+ */
+export const MAX_DOCUMENT_BYTES = 1_536 * 1024;
 
 export type DocumentContentType = 'image/jpeg' | 'image/png' | 'application/pdf';
 

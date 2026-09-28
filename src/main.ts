@@ -8,7 +8,9 @@ import { validateEnvironment } from './config/env.schema.js';
 async function bootstrap(): Promise<void> {
   const env = validateEnvironment(process.env);
   const adapter = new FastifyAdapter({
-    bodyLimit: 1_048_576,
+    // 2.5 MiB: room for a KYC document photo sent as base64 (ADR-015), whose
+    // own limit is enforced where it is decoded.
+    bodyLimit: 2_621_440,
     connectionTimeout: 10_000,
     keepAliveTimeout: 72_000,
     requestTimeout: 30_000,

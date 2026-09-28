@@ -40,7 +40,7 @@ Three stages, strictly ordered:
     passing it.
   - One verified NIN per account.
 - **Document:**
-  - JPEG, PNG or PDF, at most 700 KiB, checked against its magic bytes.
+  - JPEG, PNG or PDF, at most 1.5 MiB (the request body limit rose to 2.5 MiB for it), checked against its magic bytes.
   - Stored AES-256-GCM encrypted in `verification_documents.ciphertext`, under
     a key derived with HKDF from `TOKEN_PEPPER`. This holds until object
     storage exists.

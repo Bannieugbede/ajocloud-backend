@@ -14,9 +14,8 @@ export class UploadIdentityDocumentDto {
   contentType!: string;
 
   @IsString()
-  // Just under the 1 MiB body limit, so an oversized file gets this message
-  // rather than a bare 413.
-  @MaxLength(1_000_000)
+  // Base64 of the 1.5 MiB document limit, inside the 2.5 MiB body limit.
+  @MaxLength(2_200_000)
   @IsBase64()
   data!: string;
 }
