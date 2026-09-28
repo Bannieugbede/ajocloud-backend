@@ -1,7 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Environment } from '../../../config/env.schema.js';
-import { MonnifyIdentityProvider } from './monnify-identity.provider.js';
+import { MonnifyIdentityProvider, registeredAddressOf } from './monnify-identity.provider.js';
 
 const BVN = '22345678901';
 
@@ -174,5 +174,22 @@ describe('MonnifyIdentityProvider', () => {
 
     expect(result.passed).toBe(true);
     expect(result.accountName).toBe('Ada Okafor');
+  });
+});
+
+describe('registeredAddressOf', () => {
+  it('reads NIMC residence fields when Monnify passes them through', () => {
+    expect(
+      registeredAddressOf({
+        residence_AdressLine1: '12 Admiralty Way',
+        residence_Town: 'Lekki',
+        residence_lga: 'Eti-Osa',
+        residence_state: 'Lagos',
+      }),
+    ).toEqual({ line: '12 Admiralty Way', city: 'Lekki', lga: 'Eti-Osa', state: 'Lagos' });
+  });
+
+  it('is absent when the record has no address line', () => {
+    expect(registeredAddressOf({ firstName: 'Ada', residenceState: 'Lagos' })).toBeUndefined();
   });
 });

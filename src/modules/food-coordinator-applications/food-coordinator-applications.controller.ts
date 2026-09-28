@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { CreateFoodCoordinatorApplicationDto } from './dto/create-food-coordinator-application.dto.js';
 import { FoodCoordinatorApplicationsService } from './food-coordinator-applications.service.js';
 import { UpdateFoodCoordinatorApplicationDto } from './dto/update-food-coordinator-application.dto.js';
@@ -42,7 +43,9 @@ export class FoodCoordinatorApplicationsController {
     return this.applications.update(user.userId, applicationId, dto);
   }
 
+  /** Drafting is open to anyone; submitting needs full verification. */
   @Post(':applicationId/submit')
+  @RequireKycStage('food-coordinator.apply')
   submit(
     @CurrentUser() user: AuthenticatedUser,
     @Param('applicationId', ParseUUIDPipe) applicationId: string,

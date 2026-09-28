@@ -31,6 +31,7 @@ import {
 import { assertAjoGroupBounds, generateRotationSchedule } from './domain/ajo-schedule.js';
 import type { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
 import type { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
+import { assertOrganiserVerified } from '../kyc/kyc-facts.js';
 
 @Injectable()
 export class AjoGroupsService {
@@ -313,6 +314,13 @@ export class AjoGroupsService {
       if (group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
         throw new ConflictException('This group no longer accepts members');
       }
+      // A group is run by its admin, so one whose admin is not fully verified
+      // takes no new members, even one created before stages existed.
+      const admin = await tx.ajoGroupMember.findFirst({
+        where: { groupId, role: AjoMemberRole.GROUP_ADMIN, status: AjoMemberStatus.ACTIVE },
+        select: { userId: true },
+      });
+      await assertOrganiserVerified(tx, admin?.userId ?? group.createdByUserId);
       const viaListing =
         publicCode !== null && group.publiclyListed && group.shortCode === publicCode;
       const invitation =

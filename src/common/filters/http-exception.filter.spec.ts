@@ -1,8 +1,20 @@
-import { ArgumentsHost, BadRequestException, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter.js';
 
 interface SentBody {
-  error: { code: string; message: string | string[]; requestId: string; timestamp: string };
+  error: {
+    code: string;
+    message: string | string[];
+    details?: Record<string, unknown>;
+    requestId: string;
+    timestamp: string;
+  };
 }
 
 function hostFor(url = '/api/v1/auth/login', method = 'POST') {
@@ -76,5 +88,30 @@ describe('HttpExceptionFilter', () => {
     const { host } = hostFor('/api/v1/auth/callback?code=secret-grant');
     new HttpExceptionFilter().catch(new Error('boom'), host);
     expect(String(error.mock.calls[0]?.[0])).not.toContain('secret-grant');
+  });
+
+  it("passes a client error's own code and details through", () => {
+    const { host, sent } = hostFor();
+    new HttpExceptionFilter().catch(
+      new ForbiddenException({
+        code: 'KYC_STAGE_REQUIRED',
+        message: 'Complete stage 2',
+        details: { requiredStage: 2 },
+      }),
+      host,
+    );
+    expect(sent.body?.error.code).toBe('KYC_STAGE_REQUIRED');
+    expect(sent.body?.error.details).toEqual({ requiredStage: 2 });
+    expect(sent.body?.error.message).toBe('Complete stage 2');
+  });
+
+  it('keeps the status code for a server fault even when one is named', () => {
+    const { host, sent } = hostFor();
+    new HttpExceptionFilter().catch(
+      new InternalServerErrorException({ code: 'SOMETHING', details: { secret: 'x' } }),
+      host,
+    );
+    expect(sent.body?.error.code).toBe('HTTP_500');
+    expect(sent.body?.error.details).toBeUndefined();
   });
 });

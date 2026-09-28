@@ -4,15 +4,21 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { KycCheckStatus, type KycStatus, type KycTier } from '../../../generated/prisma/enums.js';
+import type { Environment } from '../../config/env.schema.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { TransactionalNotificationService } from '../notifications/transactional-notification.service.js';
 import {
   TransactionService,
   type TransactionClient,
 } from '../../infrastructure/database/transaction.service.js';
+import { decryptDocument, documentKey } from './domain/identity-document.js';
+import { completedLevel, tierForLevel } from './domain/kyc-stage-policy.js';
+import { NIN_DOCUMENT_TYPES, readKycFacts } from './kyc-facts.js';
 import {
   canGrantTier,
+  checkTypesApprovedBy,
   isReviewable,
   reviewStatusForDecision,
   statusAfterDecision,
@@ -34,6 +40,7 @@ export class KycReviewService {
     private readonly prisma: PrismaService,
     private readonly transactions: TransactionService,
     private readonly notifications: TransactionalNotificationService,
+    private readonly config: ConfigService<Environment, true>,
   ) {}
 
   /** The queue: profiles awaiting a decision, oldest submission first. */
@@ -88,12 +95,25 @@ export class KycReviewService {
             maskedIdentifier: true,
             failureReason: true,
             riskFlags: true,
+            // The addresses compared at stage 3; never an identity number.
+            resultSummary: true,
             submittedAt: true,
             checkedAt: true,
           },
           orderBy: { createdAt: 'desc' },
         },
-        documents: { select: { id: true, type: true, expiresAt: true, createdAt: true } },
+        documents: {
+          select: {
+            id: true,
+            type: true,
+            contentType: true,
+            sizeBytes: true,
+            supersededAt: true,
+            expiresAt: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         reviews: {
           select: {
             id: true,
@@ -109,6 +129,42 @@ export class KycReviewService {
     });
     if (!profile) throw new NotFoundException('KYC profile was not found');
     return profile;
+  }
+
+  /**
+   * One uploaded document, decrypted for a reviewer. Every view is audited:
+   * a photo of an identity document is the most sensitive thing held, and who
+   * looked at it, when, is part of the record.
+   */
+  async getDocument(
+    reviewerId: string,
+    kycProfileId: string,
+    documentId: string,
+  ): Promise<{ id: string; type: string; contentType: string; data: string }> {
+    const document = await this.prisma.verificationDocument.findFirst({
+      where: { id: documentId, kycProfileId },
+      select: { id: true, type: true, contentType: true, ciphertext: true },
+    });
+    if (!document?.ciphertext || !document.contentType) {
+      throw new NotFoundException('Document was not found');
+    }
+    const key = documentKey(this.config.get('TOKEN_PEPPER', { infer: true }));
+    const plain = decryptDocument(Buffer.from(document.ciphertext), key);
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: reviewerId,
+        action: 'kyc.document.viewed',
+        subjectType: 'VerificationDocument',
+        subjectId: document.id,
+        metadata: { kycProfileId, type: document.type },
+      },
+    });
+    return {
+      id: document.id,
+      type: document.type,
+      contentType: document.contentType,
+      data: plain.toString('base64'),
+    };
   }
 
   approve(reviewerId: string, kycProfileId: string, dto: ApproveKycProfileDto): Promise<unknown> {
@@ -146,7 +202,15 @@ export class KycReviewService {
           userId: true,
           status: true,
           tier: true,
-          checks: { where: { status: KycCheckStatus.PASSED }, select: { type: true } },
+          checks: {
+            where: { status: { in: [KycCheckStatus.PASSED, KycCheckStatus.PENDING] } },
+            select: { id: true, type: true, status: true },
+          },
+          documents: {
+            where: { type: { in: [...NIN_DOCUMENT_TYPES] }, supersededAt: null },
+            select: { id: true },
+            take: 1,
+          },
         },
       });
       if (!profile) throw new NotFoundException('KYC profile was not found');
@@ -155,24 +219,59 @@ export class KycReviewService {
       }
 
       const tier = grantedTier ?? profile.tier;
+      const now = new Date();
+      const held = profile.checks.filter((check) => check.status === KycCheckStatus.PENDING);
       if (decision === 'APPROVE') {
-        const passed = profile.checks.map((check) => check.type as string);
-        if (!canGrantTier(tier, passed)) {
+        const evidence = {
+          checkTypes: profile.checks.map((check) => check.type as string),
+          hasNinDocument: profile.documents.length > 0,
+        };
+        if (!canGrantTier(tier, evidence)) {
           throw new UnprocessableEntityException(
-            `Tier ${tier} requires passed verification checks the profile does not have`,
+            `Tier ${tier} requires verification evidence the profile does not have`,
           );
+        }
+        // Approving is what passes a check held for review, and only the
+        // checks the granted tier rests on.
+        const approved: readonly string[] = checkTypesApprovedBy(tier);
+        const passing = held.filter((check) => approved.includes(check.type));
+        if (passing.length > 0) {
+          await tx.kycCheck.updateMany({
+            where: { id: { in: passing.map((check) => check.id) } },
+            data: { status: KycCheckStatus.PASSED, reviewerUserId: reviewerId, checkedAt: now },
+          });
+        }
+      } else if (decision === 'REJECT' || decision === 'REQUEST_INFORMATION') {
+        // A held check that is not approved fails, so the person can submit
+        // again rather than wait on a review that has ended.
+        if (held.length > 0) {
+          await tx.kycCheck.updateMany({
+            where: { id: { in: held.map((check) => check.id) } },
+            data: {
+              status: KycCheckStatus.FAILED,
+              reviewerUserId: reviewerId,
+              checkedAt: now,
+              failureReason: decision === 'REJECT' ? 'REJECTED_BY_REVIEW' : 'INFORMATION_REQUESTED',
+            },
+          });
         }
       }
 
       const nextStatus: KycStatus = statusAfterDecision(decision);
-      const now = new Date();
+      // The stored tier follows the evidence as it stands after this decision,
+      // never beyond it, whatever tier was named.
+      const facts = await readKycFacts(tx, profile.userId);
+      const level = completedLevel({
+        ...facts,
+        restricted: facts.restricted || decision === 'REJECT',
+      });
       const updated = await tx.kycProfile.update({
         where: { id: kycProfileId },
         data: {
           status: nextStatus,
-          ...(decision === 'APPROVE'
-            ? { tier, level: this.levelForTier(tier), verifiedAt: now }
-            : {}),
+          tier: tierForLevel(level),
+          level,
+          ...(decision === 'APPROVE' ? { verifiedAt: now } : {}),
           ...(decision === 'REJECT' ? { restrictedAt: now } : {}),
         },
         select: {
@@ -244,10 +343,6 @@ export class KycReviewService {
     }
 
     return decided.updated;
-  }
-
-  private levelForTier(tier: KycTier): number {
-    return tier === 'TIER_3' ? 3 : tier === 'TIER_2' ? 2 : 1;
   }
 
   private async audit(

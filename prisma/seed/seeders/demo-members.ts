@@ -34,6 +34,12 @@ import {
  */
 export const DEMO_PASSWORD = 'Password';
 
+/** The transaction PIN every verified demo member shares. */
+export const DEMO_PIN = '1357';
+
+/** The address on every seeded NIN record, and the one stage 3 matched. */
+const DEMO_ADDRESS = { line: '1 Mock Street', city: 'Ikeja', lga: 'Ikeja', state: 'Lagos' };
+
 export type DemoMember = {
   readonly key: string;
   readonly email: string;
@@ -64,7 +70,7 @@ export const DEMO_MEMBERS: readonly DemoMember[] = [
     firstName: 'Adebayo',
     lastName: 'Okonkwo',
     referralCode: 'AJO-ADEB2Y',
-    tier: KycTier.TIER_2,
+    tier: KycTier.TIER_3,
     verified: true,
   },
   {
@@ -74,7 +80,7 @@ export const DEMO_MEMBERS: readonly DemoMember[] = [
     firstName: 'Emeka',
     lastName: 'Nwosu',
     referralCode: 'AJO-EMEK2N',
-    tier: KycTier.TIER_2,
+    tier: KycTier.TIER_3,
     verified: true,
   },
   {
@@ -84,7 +90,7 @@ export const DEMO_MEMBERS: readonly DemoMember[] = [
     firstName: 'Amaka',
     lastName: 'Obiora',
     referralCode: 'AJO-AMAK2O',
-    tier: KycTier.TIER_2,
+    tier: KycTier.TIER_3,
     verified: true,
   },
   {
@@ -94,7 +100,7 @@ export const DEMO_MEMBERS: readonly DemoMember[] = [
     firstName: 'Emeka',
     lastName: 'Johnson',
     referralCode: 'AJO-EMEK2J',
-    tier: KycTier.TIER_2,
+    tier: KycTier.TIER_3,
     verified: true,
   },
   {
@@ -104,7 +110,7 @@ export const DEMO_MEMBERS: readonly DemoMember[] = [
     firstName: 'Bode',
     lastName: 'Adewale',
     referralCode: 'AJO-BODE2W',
-    tier: KycTier.TIER_2,
+    tier: KycTier.TIER_3,
     verified: true,
   },
   {
@@ -217,33 +223,89 @@ export async function seedDemoMembers(prisma: PrismaClient): Promise<DemoUsers> 
       });
     }
 
+    // Staged verification (ADR-015): each member carries the evidence for
+    // their tier, because access is decided from evidence, not the tier.
+    // Stage 1 for everyone: the basic details that finish sign-up.
+    await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: {
+        dateOfBirth: new Date('1990-06-15'),
+        gender: 'PREFER_NOT_TO_SAY',
+        occupation: 'Trader',
+        ...(member.tier === KycTier.TIER_3
+          ? { addressLine: DEMO_ADDRESS.line, city: DEMO_ADDRESS.city, state: DEMO_ADDRESS.state }
+          : {}),
+      },
+    });
+
+    const level = !member.verified ? 1 : member.tier === KycTier.TIER_3 ? 3 : 2;
     const kyc = await prisma.kycProfile.upsert({
       where: { userId: user.id },
-      update: { tier: member.tier },
+      update: { tier: member.tier, level },
       create: {
         userId: user.id,
         tier: member.tier,
         status: member.verified ? KycStatus.VERIFIED : KycStatus.NOT_STARTED,
-        level: member.verified ? 3 : 1,
+        level,
         ...(member.verified ? { verifiedAt: new Date('2026-02-01T00:00:00Z') } : {}),
       },
     });
 
     if (member.verified) {
+      await prisma.transactionPin.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: { userId: user.id, pinHash: await hash(DEMO_PIN, { type: argon2id }) },
+      });
+
       const existing = await prisma.kycCheck.findFirst({
-        where: { kycProfileId: kyc.id, type: VerificationType.BVN },
+        where: { kycProfileId: kyc.id, type: VerificationType.NIN },
         select: { id: true },
       });
       if (!existing) {
         await prisma.kycCheck.create({
           data: {
             kycProfileId: kyc.id,
-            type: VerificationType.BVN,
+            type: VerificationType.NIN,
             provider: 'seed',
             status: KycCheckStatus.PASSED,
             // Only the masked value is ever persisted (ADR-004). These digits
             // are fabricated and belong to no real person.
             maskedIdentifier: `*******${member.phone.slice(-4)}`,
+            resultSummary: { registeredAddress: DEMO_ADDRESS },
+            checkedAt: new Date('2026-02-01T00:00:00Z'),
+          },
+        });
+      }
+
+      // A placeholder with no content: the reviewer's document view reports
+      // it as missing, which is true, since no seeded identity has a photo.
+      await prisma.verificationDocument.upsert({
+        where: { storageKey: `seed:nin-slip:${member.key}` },
+        update: {},
+        create: {
+          kycProfileId: kyc.id,
+          type: 'NIN_SLIP',
+          storageKey: `seed:nin-slip:${member.key}`,
+          contentHash: 'seed',
+        },
+      });
+    }
+
+    if (member.verified && member.tier === KycTier.TIER_3) {
+      const address = await prisma.kycCheck.findFirst({
+        where: { kycProfileId: kyc.id, type: VerificationType.ADDRESS },
+        select: { id: true },
+      });
+      if (!address) {
+        await prisma.kycCheck.create({
+          data: {
+            kycProfileId: kyc.id,
+            type: VerificationType.ADDRESS,
+            provider: 'seed',
+            status: KycCheckStatus.PASSED,
+            resultCode: 'MATCHED',
+            resultSummary: { submitted: DEMO_ADDRESS },
             checkedAt: new Date('2026-02-01T00:00:00Z'),
           },
         });

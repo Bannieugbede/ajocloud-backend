@@ -26,6 +26,16 @@ export class AdminKycReviewController {
     return this.reviews.getForReview(kycProfileId);
   }
 
+  /** An uploaded document, decrypted. Each view is audited. */
+  @Get(':kycProfileId/documents/:documentId')
+  document(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('kycProfileId', ParseUUIDPipe) kycProfileId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    return this.reviews.getDocument(user.userId, kycProfileId, documentId);
+  }
+
   @Post(':kycProfileId/approve')
   approve(
     @CurrentUser() user: AuthenticatedUser,

@@ -37,3 +37,18 @@ export class UpdatePersonalDetailsDto {
   @MaxLength(120)
   occupation!: string;
 }
+
+/** Stage 1 of staged verification (ADR-015): the details that finish sign-up. */
+export class UpdateBasicInfoDto {
+  @Type(() => Date)
+  @IsDate()
+  dateOfBirth!: Date;
+
+  @IsEnum(GenderInput)
+  gender!: GenderInput;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  occupation!: string;
+}

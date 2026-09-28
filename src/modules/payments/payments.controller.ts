@@ -14,6 +14,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { ConfirmIntentDto } from './dto/confirm-intent.dto.js';
 import { CreateIntentDto } from './dto/create-intent.dto.js';
 import { PaymentsService } from './payments.service.js';
@@ -38,6 +39,7 @@ export class PaymentsController {
    * request body carries no amount.
    */
   @Post('intents')
+  @RequireKycStage('payment')
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -55,6 +57,8 @@ export class PaymentsController {
    */
   @Post('intents/:intentId/confirm')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  // Checked again at confirmation, for an intent created before a restriction.
+  @RequireKycStage('payment')
   confirm(
     @CurrentUser() user: AuthenticatedUser,
     @Param('intentId', ParseUUIDPipe) intentId: string,

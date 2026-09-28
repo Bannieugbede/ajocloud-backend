@@ -15,3 +15,10 @@ supported by Monnify and is refused rather than misrouted to the NIN endpoint. R
 `KycService` and asserted by tests that search every persisted and audited payload for the
 identifier. Name matching is advisory and routes to review rather than rejecting. Tier 3 face
 match and liveness remain unimplemented.
+
+## Staged verification (2026-09-28)
+
+Superseded by [ADR-015](adr/ADR-015-staged-verification.md). There are three
+stages, account, identity (PIN, NIN, NIN document) and address (matching the
+NIN record), and every capability is gated by the stage it needs, decided from
+evidence on each request.

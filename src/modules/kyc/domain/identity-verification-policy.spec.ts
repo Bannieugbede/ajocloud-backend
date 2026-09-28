@@ -7,8 +7,6 @@ import {
   isValidIdentityNumber,
   namesMatch,
   normalizeIdentityNumber,
-  personalDetailsComplete,
-  qualifiesForTier2,
 } from './identity-verification-policy.js';
 
 describe('identity number shape', () => {
@@ -117,59 +115,6 @@ describe('name matching', () => {
 
   it('treats an empty name as not matching rather than as a pass', () => {
     expect(namesMatch('', 'Ada Okafor')).toBe(false);
-  });
-});
-
-describe('personal details completeness', () => {
-  const complete = {
-    dateOfBirth: new Date('1995-01-01'),
-    gender: 'FEMALE',
-    addressLine: '12 Marina Road',
-    city: 'Lagos',
-    state: 'Lagos',
-    occupation: 'Trader',
-  };
-
-  it('accepts a fully populated profile', () => {
-    expect(personalDetailsComplete(complete)).toBe(true);
-  });
-
-  it('rejects a missing field', () => {
-    expect(personalDetailsComplete({ ...complete, occupation: null })).toBe(false);
-    expect(personalDetailsComplete({ ...complete, dateOfBirth: null })).toBe(false);
-  });
-
-  it('rejects whitespace as a value', () => {
-    expect(personalDetailsComplete({ ...complete, city: '   ' })).toBe(false);
-  });
-});
-
-describe('tier 2 qualification', () => {
-  it('requires all three of details, identity, and bank account', () => {
-    expect(
-      qualifiesForTier2({
-        personalDetailsComplete: true,
-        identityCheckPassed: true,
-        bankAccountVerified: true,
-      }),
-    ).toBe(true);
-  });
-
-  it('withholds the tier when any part is missing', () => {
-    expect(
-      qualifiesForTier2({
-        personalDetailsComplete: true,
-        identityCheckPassed: true,
-        bankAccountVerified: false,
-      }),
-    ).toBe(false);
-    expect(
-      qualifiesForTier2({
-        personalDetailsComplete: false,
-        identityCheckPassed: true,
-        bankAccountVerified: true,
-      }),
-    ).toBe(false);
   });
 });
 

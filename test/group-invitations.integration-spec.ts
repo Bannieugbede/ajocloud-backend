@@ -15,6 +15,7 @@ import type { PrismaService } from '../src/infrastructure/database/prisma.servic
 import type { TransactionService } from '../src/infrastructure/database/transaction.service.js';
 import { AjoGroupsService } from '../src/modules/ajo-groups/ajo-groups.service.js';
 import { GroupInvitationsService } from '../src/modules/ajo-groups/group-invitations.service.js';
+import { grantFullVerification } from './support/kyc.js';
 
 const runDatabaseTests =
   process.env.CI === 'true' || process.env.RUN_DATABASE_INTEGRATION === 'true';
@@ -91,6 +92,8 @@ describeWithDatabase('Group invitations (PostgreSQL integration)', () => {
       user('stranger'),
       user('listed'),
     ]);
+    // A group takes members only while its admin is fully verified.
+    await grantFullVerification(prisma, ownerId);
 
     const group = await prisma.ajoGroup.create({
       data: {

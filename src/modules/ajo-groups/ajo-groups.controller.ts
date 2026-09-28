@@ -16,6 +16,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { PermissionsGuard } from '../permissions/permissions.guard.js';
 import { AjoGroupsService } from './ajo-groups.service.js';
 import { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
@@ -41,6 +42,7 @@ export class AjoGroupsController {
 
   @Post()
   @RequirePermissions('ajo.create')
+  @RequireKycStage('ajo.create')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAjoGroupDto) {
     return this.groups.create(user.userId, dto);
   }
@@ -69,6 +71,7 @@ export class AjoGroupsController {
   }
 
   @Post(':groupId/join')
+  @RequireKycStage('ajo.join')
   join(
     @CurrentUser() user: AuthenticatedUser,
     @Param('groupId', ParseUUIDPipe) groupId: string,
@@ -83,6 +86,7 @@ export class AjoGroupsController {
    * invitation. Its administrator only.
    */
   @Patch(':groupId/listing')
+  @RequireKycStage('ajo.administer')
   setListing(
     @CurrentUser() user: AuthenticatedUser,
     @Param('groupId', ParseUUIDPipe) groupId: string,
@@ -96,6 +100,7 @@ export class AjoGroupsController {
    * its digest is stored, so it cannot be recovered afterwards.
    */
   @Post(':groupId/invitations')
+  @RequireKycStage('ajo.administer')
   createInvitation(
     @CurrentUser() user: AuthenticatedUser,
     @Param('groupId', ParseUUIDPipe) groupId: string,
@@ -127,6 +132,7 @@ export class AjoGroupsController {
    * payment is allowed; the schedule advances to PAID only when it is whole.
    */
   @Post(':groupId/contributions/:scheduleId/pay')
+  @RequireKycStage('ajo.contribute')
   payContribution(
     @CurrentUser() user: AuthenticatedUser,
     @Param('groupId', ParseUUIDPipe) groupId: string,
@@ -141,6 +147,7 @@ export class AjoGroupsController {
    * held, unless every contribution in that cycle has been settled (ADR-011).
    */
   @Post(':groupId/payouts/:payoutScheduleId/execute')
+  @RequireKycStage('ajo.administer')
   executePayout(
     @CurrentUser() user: AuthenticatedUser,
     @Param('groupId', ParseUUIDPipe) groupId: string,
@@ -151,6 +158,7 @@ export class AjoGroupsController {
 
   @Post(':groupId/lock')
   @RequirePermissions('ajo.lock')
+  @RequireKycStage('ajo.administer')
   lock(@CurrentUser() user: AuthenticatedUser, @Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.groups.lock(user.userId, groupId);
   }

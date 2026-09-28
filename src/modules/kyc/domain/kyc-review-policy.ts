@@ -46,19 +46,29 @@ export function reviewStatusForDecision(
 }
 
 /**
- * A tier is only granted when its evidence exists. Tier 2 requires a passed
- * identity check; Tier 3 additionally requires a passed bank-account check,
- * because Tier 3 unlocks coordinator approval and high-value movement.
+ * A tier is only granted when its evidence exists (ADR-015). Tier 2 needs a NIN
+ * check and the NIN document; Tier 3 additionally needs an address check.
  *
- * `passedCheckTypes` is what the profile actually has on file — approving a tier
- * the evidence does not support is the failure mode this guards against.
+ * `checkTypes` counts checks that passed or are held for this review, since
+ * approving is exactly what passes a held one. Approving a tier the evidence
+ * does not support is the failure mode this guards against.
  */
-export function canGrantTier(tier: KycTier, passedCheckTypes: readonly string[]): boolean {
-  const has = (type: string) => passedCheckTypes.includes(type);
-  const hasIdentity = has('BVN') || has('NIN') || has('VNIN');
+export function canGrantTier(
+  tier: KycTier,
+  evidence: { readonly checkTypes: readonly string[]; readonly hasNinDocument: boolean },
+): boolean {
+  const has = (type: string) => evidence.checkTypes.includes(type);
+  const stage2 = (has('NIN') || has('VNIN')) && evidence.hasNinDocument;
   if (tier === 'TIER_1') return true;
-  if (tier === 'TIER_2') return hasIdentity;
-  return hasIdentity && has('BANK_ACCOUNT');
+  if (tier === 'TIER_2') return stage2;
+  return stage2 && has('ADDRESS');
+}
+
+/** Checks an approval of `tier` passes, if they are held for review. */
+export function checkTypesApprovedBy(tier: KycTier): readonly ('NIN' | 'VNIN' | 'ADDRESS')[] {
+  if (tier === 'TIER_1') return [];
+  if (tier === 'TIER_2') return ['NIN', 'VNIN'];
+  return ['NIN', 'VNIN', 'ADDRESS'];
 }
 
 /**

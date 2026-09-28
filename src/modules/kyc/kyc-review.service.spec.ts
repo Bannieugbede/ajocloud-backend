@@ -37,12 +37,15 @@ function firstCall<A extends unknown[]>(mock: jest.Mock<WriteResult, A>): A {
   return call;
 }
 
+type CheckSeed = { type: string; status: 'PASSED' | 'PENDING' | 'FAILED' };
+
 type ProfileSeed = {
   id?: string;
   userId?: string;
   status?: string;
   tier?: string;
-  passedChecks?: string[];
+  checks?: CheckSeed[];
+  hasNinDocument?: boolean;
   openReviewId?: string | null;
 };
 
@@ -50,8 +53,17 @@ type ProfileSeed = {
  * The transaction client is hand-built rather than mocked wholesale so each test
  * can assert exactly which rows a decision wrote — the audit entry and outbox
  * event are the compliance record, so their absence is a real defect.
+ *
+ * Checks are held in one list that the decision's updates change, so the tier
+ * the service recomputes afterwards reads what the decision left behind.
  */
 function build(seed: ProfileSeed = {}) {
+  const checks = (seed.checks ?? [{ type: 'NIN', status: 'PASSED' }]).map((check, index) => ({
+    id: `check-${index}`,
+    createdAt: new Date(2026, 0, index + 1),
+    ...check,
+  }));
+  const documents = seed.hasNinDocument === false ? [] : [{ id: 'doc-1' }];
   const profile =
     seed.status === 'MISSING'
       ? null
@@ -60,7 +72,10 @@ function build(seed: ProfileSeed = {}) {
           userId: seed.userId ?? 'user-1',
           status: seed.status ?? 'PENDING',
           tier: seed.tier ?? 'TIER_1',
-          checks: (seed.passedChecks ?? ['BVN']).map((type) => ({ type })),
+          get checks() {
+            return checks.filter((check) => check.status !== 'FAILED');
+          },
+          documents,
         };
 
   const calls = {
@@ -68,6 +83,20 @@ function build(seed: ProfileSeed = {}) {
       id: 'kyc-1',
       ...data,
     })),
+    checkUpdate: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: { id: { in: string[] } };
+        data: { status: CheckSeed['status'] };
+      }) => {
+        for (const check of checks) {
+          if (where.id.in.includes(check.id)) check.status = data.status;
+        }
+        return { count: where.id.in.length };
+      },
+    ),
     reviewUpdate: jest.fn<WriteResult, [ReviewWriteArgs]>(() => ({})),
     reviewCreate: jest.fn<WriteResult, [ReviewWriteArgs]>(() => ({})),
     auditCreate: jest.fn<WriteResult, [AuditWriteArgs]>(() => ({})),
@@ -75,10 +104,26 @@ function build(seed: ProfileSeed = {}) {
   };
 
   const tx = {
+    // What readKycFacts sees: a member who finished stage 1 and set a PIN.
+    user: {
+      findUnique: jest.fn(() => ({
+        status: 'ACTIVE',
+        profile: {
+          firstName: 'Ada',
+          lastName: 'Okafor',
+          dateOfBirth: new Date('1995-01-01'),
+          gender: 'FEMALE',
+          occupation: 'Trader',
+        },
+        transactionPin: { id: 'pin-1' },
+        kycProfile: { status: profile?.status, restrictedAt: null, checks, documents },
+      })),
+    },
     kycProfile: {
       findUnique: jest.fn().mockResolvedValue(profile),
       update: calls.profileUpdate,
     },
+    kycCheck: { updateMany: calls.checkUpdate },
     complianceReview: {
       findFirst: jest
         .fn()
@@ -97,13 +142,19 @@ function build(seed: ProfileSeed = {}) {
   };
 
   const notifications = { notify: jest.fn().mockResolvedValue({ inApp: true, pushed: 1 }) };
-  const service = new KycReviewService({} as never, transactions as never, notifications as never);
-  return { service, calls, transactions, notifications };
+  const config = { get: jest.fn().mockReturnValue('test-pepper-value-at-least-32-characters') };
+  const service = new KycReviewService(
+    {} as never,
+    transactions as never,
+    notifications as never,
+    config as never,
+  );
+  return { service, calls, checks, transactions, notifications };
 }
 
 describe('KycReviewService.approve', () => {
   it('verifies the profile, closes the open review, and records the decision', async () => {
-    const { service, calls } = build({ passedChecks: ['BVN'] });
+    const { service, calls } = build();
 
     const result = await service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_2' } as never);
 
@@ -123,7 +174,7 @@ describe('KycReviewService.approve', () => {
   });
 
   it('refuses a tier the profile has no evidence for', async () => {
-    const { service, calls } = build({ passedChecks: ['BVN'] });
+    const { service, calls } = build();
 
     await expect(
       service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_3' } as never),
@@ -135,12 +186,47 @@ describe('KycReviewService.approve', () => {
     expect(calls.outboxCreate).not.toHaveBeenCalled();
   });
 
-  it('grants Tier 3 when both identity and bank evidence passed', async () => {
-    const { service } = build({ passedChecks: ['NIN', 'BANK_ACCOUNT'] });
+  it('refuses Tier 2 without the NIN document, and for a BVN alone', async () => {
+    await expect(
+      build({ hasNinDocument: false }).service.approve('reviewer-1', 'kyc-1', {
+        tier: 'TIER_2',
+      } as never),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(
+      build({ checks: [{ type: 'BVN', status: 'PASSED' }] }).service.approve(
+        'reviewer-1',
+        'kyc-1',
+        { tier: 'TIER_2' } as never,
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it('passes a held address check when granting Tier 3', async () => {
+    const { service, checks } = build({
+      checks: [
+        { type: 'NIN', status: 'PASSED' },
+        { type: 'ADDRESS', status: 'PENDING' },
+      ],
+    });
 
     const result = await service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_3' } as never);
 
     expect(result).toMatchObject({ tier: 'TIER_3', level: 3, status: 'VERIFIED' });
+    expect(checks.find((check) => check.type === 'ADDRESS')?.status).toBe('PASSED');
+  });
+
+  it('passes only the checks the granted tier rests on', async () => {
+    const { service, checks } = build({
+      checks: [
+        { type: 'NIN', status: 'PENDING' },
+        { type: 'ADDRESS', status: 'PENDING' },
+      ],
+    });
+
+    const result = await service.approve('reviewer-1', 'kyc-1', { tier: 'TIER_2' } as never);
+
+    expect(result).toMatchObject({ tier: 'TIER_2', level: 2 });
+    expect(checks.map((check) => check.status)).toEqual(['PASSED', 'PENDING']);
   });
 
   it('opens a review row when the profile had no open item', async () => {
@@ -155,14 +241,15 @@ describe('KycReviewService.approve', () => {
 });
 
 describe('KycReviewService decisions other than approval', () => {
-  it('rejects the profile and restricts it', async () => {
-    const { service, calls } = build();
+  it('rejects the profile, restricts it, and fails anything held', async () => {
+    const { service, calls, checks } = build({ checks: [{ type: 'NIN', status: 'PENDING' }] });
 
     const result = await service.reject('reviewer-1', 'kyc-1', {
       reason: 'Document did not match',
     } as never);
 
-    expect(result).toMatchObject({ status: 'REJECTED' });
+    expect(result).toMatchObject({ status: 'REJECTED', tier: 'TIER_1', level: 0 });
+    expect(checks[0]?.status).toBe('FAILED');
     expect(firstCall(calls.profileUpdate)[0].data.restrictedAt).toBeInstanceOf(Date);
     const [rejectArgs] = firstCall(calls.reviewUpdate);
     expect(rejectArgs.data).toMatchObject({

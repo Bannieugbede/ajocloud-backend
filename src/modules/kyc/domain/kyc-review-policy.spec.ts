@@ -1,5 +1,6 @@
 import {
   canGrantTier,
+  checkTypesApprovedBy,
   isReviewable,
   requiresReason,
   reviewStatusForDecision,
@@ -39,25 +40,34 @@ describe('decision mapping', () => {
 });
 
 describe('canGrantTier', () => {
+  const evidence = (checkTypes: string[], hasNinDocument = false) => ({
+    checkTypes,
+    hasNinDocument,
+  });
+
   it('grants Tier 1 without evidence', () => {
-    expect(canGrantTier('TIER_1', [])).toBe(true);
+    expect(canGrantTier('TIER_1', evidence([]))).toBe(true);
   });
 
-  it('requires a passed identity check for Tier 2', () => {
-    expect(canGrantTier('TIER_2', [])).toBe(false);
-    expect(canGrantTier('TIER_2', ['BVN'])).toBe(true);
-    expect(canGrantTier('TIER_2', ['NIN'])).toBe(true);
-    expect(canGrantTier('TIER_2', ['VNIN'])).toBe(true);
+  it('requires a NIN check and the NIN document for Tier 2', () => {
+    expect(canGrantTier('TIER_2', evidence(['NIN']))).toBe(false);
+    expect(canGrantTier('TIER_2', evidence(['BVN'], true))).toBe(false);
+    expect(canGrantTier('TIER_2', evidence(['NIN'], true))).toBe(true);
+    expect(canGrantTier('TIER_2', evidence(['VNIN'], true))).toBe(true);
   });
 
-  it('requires identity and bank evidence for Tier 3', () => {
-    expect(canGrantTier('TIER_3', ['BVN'])).toBe(false);
-    expect(canGrantTier('TIER_3', ['BANK_ACCOUNT'])).toBe(false);
-    expect(canGrantTier('TIER_3', ['NIN', 'BANK_ACCOUNT'])).toBe(true);
+  it('requires the address check as well for Tier 3', () => {
+    expect(canGrantTier('TIER_3', evidence(['NIN', 'BANK_ACCOUNT'], true))).toBe(false);
+    expect(canGrantTier('TIER_3', evidence(['NIN', 'ADDRESS'], true))).toBe(true);
+    expect(canGrantTier('TIER_3', evidence(['ADDRESS'], true))).toBe(false);
   });
+});
 
-  it('does not accept an unrelated passed check as identity evidence', () => {
-    expect(canGrantTier('TIER_2', ['ADDRESS', 'LIVENESS'])).toBe(false);
+describe('checkTypesApprovedBy', () => {
+  it('passes only the checks the granted tier rests on', () => {
+    expect(checkTypesApprovedBy('TIER_1')).toEqual([]);
+    expect(checkTypesApprovedBy('TIER_2')).not.toContain('ADDRESS');
+    expect(checkTypesApprovedBy('TIER_3')).toContain('ADDRESS');
   });
 });
 

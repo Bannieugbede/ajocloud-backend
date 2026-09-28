@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { CreateFoodProgrammeDto } from './dto/create-food-programme.dto.js';
 import { FoodProgrammeQueryDto } from './dto/food-programme-query.dto.js';
 import { SubscribeFoodProgrammeDto } from './dto/subscribe-food-programme.dto.js';
@@ -25,6 +26,7 @@ export class FoodAjoProgrammesController {
   constructor(private readonly programmes: FoodAjoProgrammesService) {}
 
   @Post()
+  @RequireKycStage('food-programme.create')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateFoodProgrammeDto) {
     return this.programmes.create(user.userId, dto);
   }
@@ -50,6 +52,7 @@ export class FoodAjoProgrammesController {
   }
 
   @Post(':programmeId/subscribe')
+  @RequireKycStage('food.subscribe')
   subscribe(
     @CurrentUser() user: AuthenticatedUser,
     @Param('programmeId', ParseUUIDPipe) programmeId: string,

@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { AkawoPoolsService } from './akawo-pools.service.js';
 import {
   CreateAkawoPoolDto,
@@ -29,6 +30,7 @@ export class AkawoPoolsController {
   constructor(private readonly pools: AkawoPoolsService) {}
 
   @Post()
+  @RequireKycStage('akawo-pool.create')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAkawoPoolDto) {
     return this.pools.create(user.userId, dto);
   }
@@ -56,6 +58,7 @@ export class AkawoPoolsController {
   }
 
   @Post('join')
+  @RequireKycStage('akawo-pool.join')
   join(@CurrentUser() user: AuthenticatedUser, @Body() dto: JoinAkawoPoolDto) {
     return this.pools.join(user.userId, dto);
   }
@@ -79,6 +82,7 @@ export class AkawoPoolsController {
   }
 
   @Patch(':poolId')
+  @RequireKycStage('akawo-pool.administer')
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('poolId', ParseUUIDPipe) poolId: string,
@@ -88,6 +92,7 @@ export class AkawoPoolsController {
   }
 
   @Post(':poolId/open')
+  @RequireKycStage('akawo-pool.administer')
   open(@CurrentUser() user: AuthenticatedUser, @Param('poolId', ParseUUIDPipe) poolId: string) {
     return this.pools.open(user.userId, poolId);
   }
@@ -112,6 +117,7 @@ export class AkawoPoolsController {
   }
 
   @Post(':poolId/members/:memberId/waive')
+  @RequireKycStage('akawo-pool.administer')
   waive(
     @CurrentUser() user: AuthenticatedUser,
     @Param('poolId', ParseUUIDPipe) poolId: string,

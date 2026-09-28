@@ -12,7 +12,19 @@ export interface IdentityVerificationOutcome {
   readonly resultCode: string;
   /** Legal name as held by the identity authority, used for advisory matching. */
   readonly verifiedName?: string;
+  /**
+   * The residential address on the identity record, when the provider returns
+   * one. Stage 3 compares the address a person gives against it (ADR-015).
+   */
+  readonly registeredAddress?: RegisteredAddress;
   readonly riskFlags: readonly string[];
+}
+
+export interface RegisteredAddress {
+  readonly line: string;
+  readonly city?: string;
+  readonly lga?: string;
+  readonly state?: string;
 }
 
 export interface BankAccountInquiryOutcome extends IdentityVerificationOutcome {

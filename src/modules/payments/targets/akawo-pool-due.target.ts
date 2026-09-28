@@ -11,6 +11,7 @@ import {
   PaymentTargetType,
 } from '../../../../generated/prisma/enums.js';
 import type { TransactionClient } from '../../../infrastructure/database/transaction.service.js';
+import { assertOrganiserVerified } from '../../kyc/kyc-facts.js';
 import type {
   PaymentTarget,
   PaymentTargetClient,
@@ -38,7 +39,10 @@ export class AkawoPoolDueTarget implements PaymentTarget {
     if (!targetId) throw new NotFoundException('This payment was not found');
     const due = await client.akawoPoolDue.findUnique({
       where: { id: targetId },
-      include: { pool: { select: { name: true } }, member: { select: { userId: true } } },
+      include: {
+        pool: { select: { name: true, organiserUserId: true } },
+        member: { select: { userId: true } },
+      },
     });
     // Scoped to the member who owes it: one member must not be able to pay, or
     // probe the amount of, another's due.
@@ -48,6 +52,8 @@ export class AkawoPoolDueTarget implements PaymentTarget {
     if (due.status !== AkawoDueStatus.PENDING) {
       throw new ConflictException('This has already been settled');
     }
+    // The organiser receives this money, so they must be fully verified.
+    await assertOrganiserVerified(client, due.pool.organiserUserId);
     return {
       amountMinor: due.amountMinor,
       currency: due.currency,

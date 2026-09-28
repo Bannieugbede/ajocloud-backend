@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 
 /**
- * Rules for Tier 2 identity verification, per ADR-004. Everything here is pure
+ * Rules for identity verification, per ADR-004. Everything here is pure
  * so the policy can be tested without a provider, a database, or a network.
  *
  * No function in this file accepts a raw identifier and returns it, and none
@@ -97,41 +97,6 @@ function nameTokens(value: string): string[] {
       .split(/[^a-z]+/)
       .filter((token) => token.length > 1)
   );
-}
-
-/**
- * Whether a profile has everything Tier 2 requires: complete personal details,
- * a passed identity check, and a verified bank account.
- */
-export function qualifiesForTier2(input: {
-  readonly personalDetailsComplete: boolean;
-  readonly identityCheckPassed: boolean;
-  readonly bankAccountVerified: boolean;
-}): boolean {
-  return input.personalDetailsComplete && input.identityCheckPassed && input.bankAccountVerified;
-}
-
-/** Personal details required before Tier 2 can be granted. */
-export function personalDetailsComplete(profile: {
-  readonly dateOfBirth: Date | null;
-  readonly gender: string | null;
-  readonly addressLine: string | null;
-  readonly city: string | null;
-  readonly state: string | null;
-  readonly occupation: string | null;
-}): boolean {
-  return (
-    profile.dateOfBirth !== null &&
-    profile.gender !== null &&
-    isPresent(profile.addressLine) &&
-    isPresent(profile.city) &&
-    isPresent(profile.state) &&
-    isPresent(profile.occupation)
-  );
-}
-
-function isPresent(value: string | null): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
 }
 
 /** Minimum age to hold an account. */

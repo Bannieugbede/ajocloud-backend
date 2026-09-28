@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { WalletsService } from './wallets.service.js';
 import { WalletMovementsService } from './wallet-movements.service.js';
@@ -52,8 +53,12 @@ export class WalletsController {
     return this.payments.balance(user.userId);
   }
 
-  /** Sends money to another member's wallet. Settles immediately. */
+  /**
+   * Sends money to another member's wallet. Settles immediately. Needs stage
+   * 2 like a withdrawal, or it would be a way round one.
+   */
   @Post('send')
+  @RequireKycStage('wallet.send')
   send(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -67,6 +72,7 @@ export class WalletsController {
    * PENDING: the bank rail is not operated here yet.
    */
   @Post('withdrawals')
+  @RequireKycStage('withdrawal')
   withdraw(
     @CurrentUser() user: AuthenticatedUser,
     @Headers('idempotency-key') idempotencyKey: string | undefined,

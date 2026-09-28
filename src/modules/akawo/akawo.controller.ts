@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.js';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
+import { RequireKycStage } from '../kyc/guards/kyc-stage.guard.js';
 import { AkawoService } from './akawo.service.js';
 import { AkawoStatementQueryDto } from './dto/akawo-statement-query.dto.js';
 import { CreateAkawoGoalDto } from './dto/create-akawo-goal.dto.js';
@@ -25,6 +26,7 @@ export class AkawoController {
   constructor(private readonly akawo: AkawoService) {}
 
   @Post()
+  @RequireKycStage('akawo-goal.create')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAkawoGoalDto) {
     return this.akawo.create(user.userId, dto);
   }
@@ -49,6 +51,7 @@ export class AkawoController {
   }
 
   @Post(':goalId/schedules')
+  @RequireKycStage('akawo-goal.create')
   createSchedule(
     @CurrentUser() user: AuthenticatedUser,
     @Param('goalId', ParseUUIDPipe) goalId: string,

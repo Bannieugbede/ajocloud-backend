@@ -7,6 +7,7 @@ import type {
   IdentityProvider,
   IdentityVerificationOutcome,
   ProviderBank,
+  RegisteredAddress,
 } from '../../../modules/kyc/providers/identity-provider.js';
 import { BANK_LIST_CACHE_TTL_MS } from '../../../modules/kyc/domain/identity-verification-policy.js';
 
@@ -41,6 +42,41 @@ interface MonnifyNinBody {
   readonly lastName?: string;
   readonly middleName?: string;
   readonly dateOfBirth?: string;
+  // NIMC's residence fields. Monnify's documentation does not list them, so
+  // every spelling seen in NIMC-backed responses is read and none is relied on.
+  readonly residenceAddress?: string;
+  readonly residence_AdressLine1?: string;
+  readonly residence_address?: string;
+  readonly address?: string;
+  readonly residenceTown?: string;
+  readonly residence_Town?: string;
+  readonly residenceLga?: string;
+  readonly residence_lga?: string;
+  readonly residenceState?: string;
+  readonly residence_state?: string;
+}
+
+function firstText(...values: (string | undefined)[]): string | undefined {
+  return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+}
+
+/**
+ * The address on a NIN record, when Monnify passes NIMC's residence fields
+ * through. Absent otherwise, and stage 3 then goes to a reviewer, who compares
+ * against the uploaded NIN document instead (ADR-015).
+ */
+export function registeredAddressOf(body: MonnifyNinBody): RegisteredAddress | undefined {
+  const line = firstText(
+    body.residenceAddress,
+    body.residence_AdressLine1,
+    body.residence_address,
+    body.address,
+  );
+  if (!line) return undefined;
+  const city = firstText(body.residenceTown, body.residence_Town);
+  const lga = firstText(body.residenceLga, body.residence_lga);
+  const state = firstText(body.residenceState, body.residence_state);
+  return { line, ...(city ? { city } : {}), ...(lga ? { lga } : {}), ...(state ? { state } : {}) };
 }
 
 interface MonnifyAccountBody {
@@ -148,12 +184,16 @@ export class MonnifyIdentityProvider implements IdentityProvider {
       riskFlags.push('DOB_MISMATCH');
     }
 
+    const registeredAddress =
+      input.kind === 'BVN' ? undefined : registeredAddressOf(entity as MonnifyNinBody);
+
     return {
       provider: this.name,
       providerReference,
       passed: true,
       resultCode: 'VERIFIED',
       ...(verifiedName ? { verifiedName } : {}),
+      ...(registeredAddress ? { registeredAddress } : {}),
       riskFlags,
     };
   }

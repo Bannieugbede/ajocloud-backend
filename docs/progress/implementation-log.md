@@ -1,5 +1,21 @@
 # Implementation log
 
+## 2026-09-28 — Staged verification
+
+- `kyc-stage-policy` (stages, action table), `address-match`,
+  `identity-document` (validation plus AES-256-GCM), `readKycFacts` and
+  `@RequireKycStage` guard (ADR-015).
+- `KycService`: basic info, NIN order and review hold, encrypted document
+  upload, address match or review, and tier sync. `KycReviewService` passes or
+  fails held checks and gets an audited document view.
+- Guards on 21 routes; the organiser must be verified on Ajo and Akawo joins and
+  on pool dues.
+- Seed: verified demo members carry the NIN, document, PIN and address
+  evidence; group admins are Tier 3.
+- Validation: unit tests for policy, address, document, service, review, guard
+  and route table (168 passing in the affected suites). Integration suites were
+  updated (`test/support/kyc.ts`) but not run on this machine.
+
 ## 2026-09-27 — Bill payments through the payment intent
 
 - `BillPaymentTarget` (ADR-014): quote from the validation, PIN-guarded

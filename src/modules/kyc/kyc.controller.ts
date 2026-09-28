@@ -6,7 +6,9 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user.js
 import { AccessTokenGuard } from '../auth/guards/access-token.guard.js';
 import { InquireAccountDto } from './dto/inquire-account.dto.js';
 import { LinkBankAccountDto } from './dto/link-bank-account.dto.js';
-import { UpdatePersonalDetailsDto } from './dto/update-personal-details.dto.js';
+import { UpdateBasicInfoDto, UpdatePersonalDetailsDto } from './dto/update-personal-details.dto.js';
+import { UploadIdentityDocumentDto } from './dto/upload-identity-document.dto.js';
+import { VerifyAddressDto } from './dto/verify-address.dto.js';
 import { VerifyIdentityDto } from './dto/verify-identity.dto.js';
 import { KycService } from './kyc.service.js';
 
@@ -17,13 +19,37 @@ import { KycService } from './kyc.service.js';
 export class KycController {
   constructor(private readonly kyc: KycService) {}
 
-  /** Step f: what remains, so the introduction screen states facts. */
+  /** The caller's verification stages and what each unlocks (ADR-015). */
   @Get('status')
   status(@CurrentUser() user: AuthenticatedUser) {
     return this.kyc.status(user.userId);
   }
 
-  /** Step g. */
+  /** Stage 1: date of birth, gender and occupation. */
+  @Patch('basic-info')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  updateBasicInfo(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateBasicInfoDto) {
+    return this.kyc.updateBasicInfo(user.userId, dto);
+  }
+
+  /** Stage 2: the NIN slip or card. Tight, as each call stores a file. */
+  @Post('identity/document')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  uploadIdentityDocument(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UploadIdentityDocumentDto,
+  ) {
+    return this.kyc.uploadIdentityDocument(user.userId, dto);
+  }
+
+  /** Stage 3: the address on the NIN record. */
+  @Post('address')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  verifyAddress(@CurrentUser() user: AuthenticatedUser, @Body() dto: VerifyAddressDto) {
+    return this.kyc.verifyAddress(user.userId, dto);
+  }
+
+  /** The original details step, address included. Superseded by basic-info. */
   @Patch('personal-details')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   updatePersonalDetails(
@@ -34,7 +60,8 @@ export class KycController {
   }
 
   /**
-   * Step h. Rate limited tightly: this endpoint forwards an identity number to
+   * Stage 2's NIN check (a BVN is still accepted but counts towards no stage).
+   * Rate limited tightly: this endpoint forwards an identity number to
    * the provider, so it is the one an attacker would use to enumerate.
    */
   @Post('identity')

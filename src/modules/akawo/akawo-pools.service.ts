@@ -33,6 +33,7 @@ import type {
   UpdateAkawoPoolDto,
   WaiveAkawoDueDto,
 } from './dto/akawo-pool.dto.js';
+import { assertOrganiserVerified } from '../kyc/kyc-facts.js';
 
 const poolSelect = {
   id: true,
@@ -318,6 +319,14 @@ export class AkawoPoolsService {
     }
 
     return this.transactions.serializable(async (tx) => {
+      const owner = await tx.akawoPool.findUnique({
+        where: { id: pool.id },
+        select: { organiserUserId: true },
+      });
+      // Dues are collected by the organiser, so one who is not fully verified
+      // takes no new members, even on a pool opened before stages existed.
+      if (owner) await assertOrganiserVerified(tx, owner.organiserUserId);
+
       const existing = await tx.akawoPoolMember.findUnique({
         where: { poolId_userId: { poolId: pool.id, userId } },
         select: { id: true, status: true },

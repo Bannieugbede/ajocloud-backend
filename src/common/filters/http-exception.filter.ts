@@ -39,10 +39,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logServerFault(exception, request, status);
     }
 
+    const details = status < 500 ? this.detailsFor(response) : undefined;
     void reply.status(status).send({
       error: {
-        code: this.codeFor(status),
+        code: this.codeFor(status, response),
         message,
+        ...(details ? { details } : {}),
         requestId: request.id,
         timestamp: new Date().toISOString(),
       },
@@ -90,7 +92,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
     return status >= 500 ? 'An internal error occurred' : 'The request could not be completed';
   }
 
-  private codeFor(status: number): string {
+  /**
+   * A client error may name its own code, e.g. `KYC_STAGE_REQUIRED`, so an app
+   * can act on the refusal rather than parse its wording. Only an upper-case
+   * identifier is passed through, and never on a 5xx.
+   */
+  private codeFor(status: number, response?: string | object): string {
+    if (status < 500 && response && typeof response === 'object' && 'code' in response) {
+      const code = (response as { code?: unknown }).code;
+      if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(code)) return code;
+    }
     return `HTTP_${status}`;
+  }
+
+  /** Structured context a client error chose to expose, e.g. the stage it needs. */
+  private detailsFor(response: string | object | undefined): Record<string, unknown> | undefined {
+    if (!response || typeof response !== 'object' || !('details' in response)) return undefined;
+    const details = (response as { details?: unknown }).details;
+    return details && typeof details === 'object' && !Array.isArray(details)
+      ? (details as Record<string, unknown>)
+      : undefined;
   }
 }

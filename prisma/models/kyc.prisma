@@ -51,11 +51,20 @@ model VerificationDocument {
   type         String    @db.VarChar(64)
   storageKey   String    @unique @db.VarChar(500)
   contentHash  String    @db.VarChar(128)
+  /// MIME type of the upload, e.g. image/jpeg.
+  contentType  String?   @db.VarChar(100)
+  sizeBytes    Int?
+  /// The file, AES-256-GCM encrypted (ADR-015). Never returned except through
+  /// the audited reviewer route. Null for a document held outside the database.
+  ciphertext   Bytes?
+  /// Set when a newer upload of the same type replaces this one.
+  supersededAt DateTime? @db.Timestamptz(6)
   expiresAt    DateTime? @db.Date
   createdAt    DateTime  @default(now()) @db.Timestamptz(6)
 
   profile KycProfile @relation(fields: [kycProfileId], references: [id], onDelete: Restrict)
 
+  @@index([kycProfileId, type, supersededAt])
   @@map("verification_documents")
 }
 

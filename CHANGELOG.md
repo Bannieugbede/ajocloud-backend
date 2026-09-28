@@ -4,6 +4,18 @@
 
 ### Added
 
+- **Staged verification** (ADR-015). Stage 1 (sign-up and basic details)
+  allows joining groups and paying. Stage 2 (PIN, NIN via Monnify, NIN
+  document) allows withdrawing and sending. Stage 3 (address matching the NIN
+  record) allows creating and administering groups. Every gated route returns
+  403 `KYC_STAGE_REQUIRED`, and groups whose admin is not at stage 3 take no
+  new members or dues. New routes: `PATCH /kyc/basic-info`,
+  `POST /kyc/identity/document`, `POST /kyc/address`, and
+  `GET /admin/kyc-profiles/:id/documents/:documentId`. `GET /kyc/status` gains
+  `level`, `currentStage`, `stages` and `actions`. Client errors may now carry
+  their own `code` and `details`. Migration `20260928120000_kyc_stages` resets
+  every profile to Tier 1.
+
 - **Bills are paid through the payment intent** (ADR-014). `BILL_PAYMENT` is a
   payment target: the quote shows the bill fee, confirming needs the transaction
   PIN, the money is reserved and the provider called after commit, and the
