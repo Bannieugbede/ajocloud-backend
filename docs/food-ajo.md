@@ -11,8 +11,9 @@ the coordinator lifecycle, procurement, and distribution tooling are implemented
 
 - `POST /api/v1/food-ajo/programmes` — create a draft programme with packages/items; authenticated;
   active coordinator approval required.
-- `GET /api/v1/food-ajo/programmes?cursor=&limit=` — cursor-paginated discoverable, subscribed, or
-  coordinated programmes.
+- `GET /api/v1/food-ajo/programmes?cursor=&limit=&scope=ALL|COORDINATED` — cursor-paginated
+  discoverable, subscribed, or coordinated programmes. `COORDINATED` returns only the caller's
+  programmes for owner management; the default `ALL` retains member discovery behavior.
 - `GET /api/v1/food-ajo/programmes/:programmeId` — guarded programme detail.
 - `GET /api/v1/food-ajo/programmes/subscriptions/mine` — the caller's own enrolments.
 - `GET /api/v1/public/food-programmes/:idOrCode` — **public**, for the web page a shared
@@ -45,6 +46,9 @@ Every coordinator route is scoped to the coordinator of that specific programme,
 programme record rather than against a role: coordinating one programme must not confer control of
 another. A caller who does not coordinate the programme is told it was not found, so the routes
 cannot be used to discover that a programme exists.
+
+The mobile admin hub uses `GET /api/v1/food-ajo/programmes?scope=COORDINATED` to list only the
+caller's programmes. The default `scope=ALL` remains the member-facing discovery/enrolment view.
 
 - `PATCH /api/v1/food-ajo/programmes/:programmeId/status` — lifecycle transition.
 - `PATCH /api/v1/food-ajo/programmes/:programmeId/packages/:packageId` — edit a package while the

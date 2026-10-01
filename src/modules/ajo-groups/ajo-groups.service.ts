@@ -30,6 +30,7 @@ import {
 } from './domain/invitation-code.js';
 import { assertAjoGroupBounds, generateRotationSchedule } from './domain/ajo-schedule.js';
 import type { CreateAjoGroupDto } from './dto/create-ajo-group.dto.js';
+import type { UpdateAjoGroupProfileDto } from './dto/update-ajo-group-profile.dto.js';
 import type { JoinAjoGroupDto } from './dto/join-ajo-group.dto.js';
 import { assertOrganiserVerified } from '../kyc/kyc-facts.js';
 
@@ -171,13 +172,15 @@ export class AjoGroupsService {
         shortCode: true,
         publiclyListed: true,
         _count: { select: { slots: true, members: true } },
-        // Who runs the group, so the list can say so without a request per
-        // card. Only the admin membership is read; every other member's
-        // identity stays out of a list that does not need it.
+        // The caller role is needed by Profile's admin hub, and the admin id
+        // supplies the display name. These two memberships are enough; the
+        // rest of the group's identities stay out of this list response.
         members: {
-          where: { role: AjoMemberRole.GROUP_ADMIN, status: AjoMemberStatus.ACTIVE },
-          select: { userId: true },
-          take: 1,
+          where: {
+            status: AjoMemberStatus.ACTIVE,
+            OR: [{ userId }, { role: AjoMemberRole.GROUP_ADMIN }],
+          },
+          select: { userId: true, role: true },
         },
         // The round in progress, for "Round 3 of 12" and the next due date.
         // Ordered by sequence so the newest cycle is the current one.
@@ -209,10 +212,14 @@ export class AjoGroupsService {
 
     return groups.map((group) => {
       const { members, cycles, ...rest } = group;
-      const adminUserId = members[0]?.userId;
+      const callerMembership = members.find((member) => member.userId === userId);
+      const adminUserId = members.find(
+        (member) => member.role === AjoMemberRole.GROUP_ADMIN,
+      )?.userId;
       const cycle = cycles[0];
       return {
         ...rest,
+        callerRole: callerMembership?.role ?? null,
         adminName: adminUserId ? (nameByUserId.get(adminUserId) ?? 'Member') : null,
         currentCycle: cycle
           ? {
@@ -440,6 +447,62 @@ export class AjoGroupsService {
           },
         });
       }
+      return updated;
+    });
+  }
+
+  async updateProfile(
+    userId: string,
+    groupId: string,
+    dto: UpdateAjoGroupProfileDto,
+  ): Promise<unknown> {
+    return this.transactions.serializable(async (tx) => {
+      const membership = await tx.ajoGroupMember.findUnique({
+        where: { groupId_userId: { groupId, userId } },
+        select: { role: true, status: true },
+      });
+      if (
+        !membership ||
+        membership.role !== AjoMemberRole.GROUP_ADMIN ||
+        membership.status !== AjoMemberStatus.ACTIVE
+      ) {
+        throw new ForbiddenException('Only this group’s active administrator can edit it');
+      }
+      const group = await tx.ajoGroup.findUnique({
+        where: { id: groupId },
+        select: { id: true, status: true },
+      });
+      if (!group) throw new NotFoundException('Ajo group was not found');
+      if (group.status !== AjoGroupStatus.DRAFT && group.status !== AjoGroupStatus.OPEN) {
+        throw new ConflictException('Only a group that is still taking members can be edited');
+      }
+      if (dto.name === undefined && dto.description === undefined) {
+        throw new UnprocessableEntityException('Provide a group name or description');
+      }
+      if (dto.name !== undefined && dto.name.trim().length < 3) {
+        throw new UnprocessableEntityException('Group name must contain at least three characters');
+      }
+      const updated = await tx.ajoGroup.update({
+        where: { id: groupId },
+        data: {
+          ...(dto.name === undefined ? {} : { name: dto.name.trim() }),
+          ...(dto.description === undefined ? {} : { description: dto.description.trim() || null }),
+        },
+        select: { id: true, name: true, description: true, status: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'ajo.group.profile.updated',
+          subjectType: 'AjoGroup',
+          subjectId: groupId,
+          groupId,
+          metadata: {
+            nameChanged: dto.name !== undefined,
+            descriptionChanged: dto.description !== undefined,
+          },
+        },
+      });
       return updated;
     });
   }

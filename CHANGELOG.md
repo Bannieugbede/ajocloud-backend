@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Mobile group administration list contracts.** Ajo group list rows expose the authenticated
+  caller's active membership role. Food programme listing accepts `scope=COORDINATED` to return
+  only programmes owned by the caller while retaining cursor pagination and the default `ALL`
+  discovery scope. No migration is required.
+- **Editable Ajo group profile.** Active group administrators may update only name and description
+  while a group is `DRAFT` or `OPEN`; updates are audited and do not change financial terms or the
+  locked schedule. No migration is required.
+
 - **Staged verification** (ADR-015). Stage 1 (sign-up and basic details)
   allows joining groups and paying. Stage 2 (PIN, NIN via Monnify, NIN
   document) allows withdrawing and sending. Stage 3 (address matching the NIN

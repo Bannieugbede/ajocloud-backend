@@ -27,6 +27,7 @@ import { AjoSwapsService } from './ajo-swaps.service.js';
 import { PayContributionDto } from './dto/pay-contribution.dto.js';
 import { CreateGroupInvitationDto } from './dto/create-group-invitation.dto.js';
 import { GroupInvitationsService } from './group-invitations.service.js';
+import { UpdateAjoGroupProfileDto } from './dto/update-ajo-group-profile.dto.js';
 
 @ApiTags('ajo-groups')
 @ApiBearerAuth()
@@ -68,6 +69,16 @@ export class AjoGroupsController {
   @Get(':groupId')
   get(@CurrentUser() user: AuthenticatedUser, @Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.groups.get(user.userId, groupId);
+  }
+
+  @Patch(':groupId/profile')
+  @RequireKycStage('ajo.administer')
+  updateProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Body() dto: UpdateAjoGroupProfileDto,
+  ) {
+    return this.groups.updateProfile(user.userId, groupId, dto);
   }
 
   @Post(':groupId/join')

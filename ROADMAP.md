@@ -69,6 +69,9 @@ Status labels: **COMPLETE**, **IN PROGRESS**, **BLOCKED**, **NOT STARTED**, **DE
 Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and [ADR-002](docs/adr/ADR-002-flexible-ajo-contribution-model.md).
 
 - [x] **COMPLETE** Group lifecycle foundation
+- [x] **COMPLETE** Non-financial group profile edits — `PATCH /ajo-groups/:groupId/profile` allows
+      the active group administrator to change name/description while the group is `DRAFT` or
+      `OPEN`; the update is audited and does not alter financial or schedule terms.
 - [x] **COMPLETE** Invitations — `POST/GET/DELETE /ajo-groups/:groupId/invitations` issue, list and
       revoke shareable links; `GET /invitations/:code` describes the group to an unauthenticated
       recipient, and `GET /ajo-groups/invitations/:code/group` resolves the code for a signed-in
@@ -105,7 +108,11 @@ Acceptance follows [ADR-001](docs/adr/ADR-001-ajo-rotation-and-liquidity.md) and
 ## Phase 4 — Administration
 
 - [ ] **NOT STARTED** Super-admin APIs
-- [ ] **NOT STARTED** Group-admin APIs beyond lifecycle/swaps
+- [ ] **IN PROGRESS** Group-admin APIs — Ajo group listing now projects the caller's membership
+      role, and Food programme listing supports coordinator-owned cursor scope for the mobile admin
+      hub. Existing schedule, invitations, listing, lock and Food coordinator endpoints power the
+      mobile operations screens. Member removal, role transfer, waivers and group-wide Ajo pause
+      still need product rules and audited contracts.
 - [x] **COMPLETE** General compliance review — KYC decision workflow. `GET /admin/kyc-profiles`
       (queue) and `/:id` (evidence), plus `POST /:id/{approve,reject,request-information,escalate}`,
       all behind `kyc.review`. Each decision is one serializable transaction that moves the profile,

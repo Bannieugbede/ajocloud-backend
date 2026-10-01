@@ -137,11 +137,15 @@ export class FoodAjoProgrammesService {
   async list(userId: string, query: FoodProgrammeQueryDto): Promise<unknown> {
     const programmes = await this.prisma.foodAjoGroup.findMany({
       where: {
-        OR: [
-          { status: { in: [FoodAjoStatus.OPEN, FoodAjoStatus.ACTIVE] } },
-          { coordinatorUserId: userId },
-          { subscriptions: { some: { userId } } },
-        ],
+        ...(query.scope === 'COORDINATED'
+          ? { coordinatorUserId: userId }
+          : {
+              OR: [
+                { status: { in: [FoodAjoStatus.OPEN, FoodAjoStatus.ACTIVE] } },
+                { coordinatorUserId: userId },
+                { subscriptions: { some: { userId } } },
+              ],
+            }),
       },
       select: programmeSelect,
       orderBy: { createdAt: 'desc' },

@@ -1,5 +1,22 @@
 # Implementation log
 
+## 2026-10-01 — Mobile group administration read contracts
+
+- Ajo `GET /ajo-groups` now returns `callerRole` from the active membership while preserving the
+  admin display name projection.
+- Food `GET /food-ajo/programmes` accepts `scope=ALL|COORDINATED`; `COORDINATED` is filtered by
+  `coordinatorUserId` before cursor pagination.
+- No schema/migration was needed. Authorization remains enforced by membership and the existing
+  coordinator ownership checks.
+- Validation pending for this task; device verification pending in the mobile repository.
+
+## 2026-10-01 — Editable Ajo group profile
+
+- Added `PATCH /api/v1/ajo-groups/:groupId/profile` for name and description only. It requires the
+  active group administrator, refuses groups outside `DRAFT`/`OPEN`, and writes an audit event.
+- Financial terms, membership, and schedules are not changed by this operation. No schema migration.
+- Validation pending for this task.
+
 ## 2026-09-28 — Staged verification
 
 - `kyc-stage-policy` (stages, action table), `address-match`,

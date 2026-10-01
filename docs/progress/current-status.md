@@ -1,6 +1,6 @@
 # Current status
 
-- Last updated: 2026-09-02
+- Last updated: 2026-10-01
 - Current phase: Financial-core hardening plus staged Traditional Ajo, Food Coordinator, and Bill Payment delivery, with an admin read API layer serving the web admin dashboard
 
 ## Complete
@@ -36,6 +36,11 @@ per-topic email and SMS notification preferences with quiet hours. Security and 
 messages are exempt from both, by design.
 
 ## In progress
+
+Group-admin mobile reads are **IN PROGRESS**: Ajo list rows project the caller's role, and Food
+programme listing supports a cursor-paginated `COORDINATED` scope. Existing admin/coordinator
+operations are now consumed by the mobile Profile hub. Member removal, role transfer, dues waivers,
+and Ajo group-wide pause/close remain unspecified and have no route.
 
 Product notification delivery is **IN PROGRESS**: preferences are stored and enforced on every
 send, but only account verification, welcome, sign-in codes, and staff invites are wired to domain
